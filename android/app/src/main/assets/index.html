@@ -3,38 +3,259 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <title>Video İndirici — Android</title>
+  <title>Video İndirici</title>
   <style>
-    :root { --bg:#050811; --card:#0f172a; --border:rgba(255,255,255,0.1); --text:#f8fafc; --muted:#94a3b8; --accent:#6366f1; }
-    * { box-sizing:border-box; margin:0; padding:0; font-family:sans-serif; }
-    body { min-height:100vh; background:var(--bg); color:var(--text); padding:24px 16px; }
-    .wrap { max-width:480px; margin:0 auto; display:flex; flex-direction:column; gap:14px; }
-    h1 { font-size:22px; text-align:center; }
-    p { font-size:13px; color:var(--muted); text-align:center; }
-    .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px; display:flex; flex-direction:column; gap:12px; }
-    input { width:100%; background:#050811; border:1px solid var(--border); border-radius:10px; padding:12px; color:var(--text); font-size:14px; }
-    button { width:100%; border:none; border-radius:10px; padding:13px; background:var(--accent); color:#fff; font-size:14px; font-weight:700; }
+    :root {
+      --bg: #070b14;
+      --card: rgba(17, 24, 39, 0.9);
+      --border: rgba(255, 255, 255, 0.1);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #6366f1;
+      --success: #22c55e;
+      --error: #f87171;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif; }
+    body {
+      min-height: 100vh;
+      background: radial-gradient(circle at top, rgba(99, 102, 241, 0.22), transparent 45%), var(--bg);
+      color: var(--text);
+      padding: 20px 14px 40px;
+    }
+    .wrap { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+    .head { text-align: center; }
+    .badges { display: inline-flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; justify-content: center; }
+    .badge { font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: rgba(255,255,255,0.04); }
+    .badge.yt { color: #fca5a5; border-color: rgba(239,68,68,0.35); }
+    .badge.ig { color: #f9a8d4; border-color: rgba(236,72,153,0.35); }
+    .badge.ok { color: #86efac; border-color: rgba(34,197,94,0.35); }
+    h1 { font-size: 24px; font-weight: 800; margin-bottom: 4px; }
+    .sub { font-size: 13px; color: var(--muted); }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    input {
+      width: 100%;
+      background: #050811;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 13px 14px;
+      color: var(--text);
+      font-size: 14.5px;
+      outline: none;
+    }
+    .row { display: flex; gap: 8px; }
+    select {
+      flex: 1;
+      background: #050811;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 11px;
+      font-size: 13.5px;
+    }
+    button {
+      border: none;
+      border-radius: 11px;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 700;
+      color: white;
+      background: var(--accent);
+      cursor: pointer;
+    }
+    button.sec { background: rgba(255,255,255,0.1); }
+    button:disabled { opacity: 0.55; }
+    .preview { display: none; gap: 12px; align-items: center; border-top: 1px solid var(--border); padding-top: 12px; }
+    .preview.visible { display: flex; }
+    .preview img { width: 108px; height: 62px; object-fit: cover; border-radius: 8px; background: #1e293b; flex-shrink: 0; }
+    .preview h3 { font-size: 13.5px; margin-bottom: 3px; }
+    .preview p { font-size: 12px; color: var(--muted); }
+    .results { display: none; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; border-top: 1px solid var(--border); padding-top: 12px; }
+    .results.visible { display: flex; }
+    .res-item { display: flex; gap: 10px; align-items: center; background: rgba(5,8,17,0.65); border: 1px solid var(--border); border-radius: 11px; padding: 8px; }
+    .res-item img { width: 88px; height: 52px; object-fit: cover; border-radius: 7px; flex-shrink: 0; }
+    .res-meta { flex: 1; min-width: 0; }
+    .res-meta h4 { font-size: 13px; line-height: 1.3; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .res-meta p { font-size: 11.5px; color: var(--muted); }
+    .prog { display: none; flex-direction: column; gap: 8px; background: rgba(5,8,17,0.7); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+    .prog.visible { display: flex; }
+    .prog-top { display: flex; justify-content: space-between; font-size: 12.5px; }
+    .bar-bg { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
+    .bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #6366f1, #ec4899); transition: width 0.2s; }
+    .msg { font-size: 12.5px; color: var(--muted); word-break: break-word; }
+    .msg.ok { color: var(--success); }
+    .msg.err { color: var(--error); }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>Video İndirici (Android)</h1>
-    <p>Bilgisayarınızdaki Video İndirici sunucusuna bağlanın</p>
+    <div class="head">
+      <div class="badges">
+        <span class="badge yt">YouTube</span>
+        <span class="badge ig">Instagram</span>
+        <span class="badge ok">Bağımsız • v1.2.0</span>
+      </div>
+      <h1>Video İndirici</h1>
+      <p class="sub">Bilgisayara gerek duymadan doğrudan telefonunuza indirin.</p>
+    </div>
+
     <div class="card">
-      <input id="srv" type="url" placeholder="http://192.168.1.X:PORT" />
-      <button id="go" type="button">Bağlan ve İndir</button>
+      <input id="qInput" type="text" placeholder="YouTube'da video adı arayın veya URL yapıştırın..." />
+      <div class="row">
+        <select id="qualitySelect">
+          <option value="best">En İyi MP4</option>
+          <option value="720">720p MP4</option>
+          <option value="480">480p MP4</option>
+          <option value="audio">Sadece Ses (M4A)</option>
+        </select>
+        <button id="searchBtn" class="sec" type="button">Ara / Önizle</button>
+        <button id="dlBtn" type="button">İndir</button>
+      </div>
+
+      <div id="previewBox" class="preview">
+        <img id="thumbImg" src="" alt="" />
+        <div>
+          <h3 id="vTitle"></h3>
+          <p id="vSub"></p>
+        </div>
+      </div>
+
+      <div id="resultsBox" class="results"></div>
+
+      <div id="progBox" class="prog">
+        <div class="prog-top">
+          <span id="progLabel">Hazırlanıyor...</span>
+          <span id="progPct">0%</span>
+        </div>
+        <div class="bar-bg"><div id="progBar" class="bar-fill"></div></div>
+        <div id="statusMsg" class="msg"></div>
+      </div>
     </div>
   </div>
+
   <script>
-    const inp = document.getElementById("srv");
-    const saved = localStorage.getItem("vi_srv");
-    if (saved) inp.value = saved;
-    document.getElementById("go").addEventListener("click", () => {
-      const v = inp.value.trim().replace(/\/+$/, "");
-      if (!v.startsWith("http")) { alert("Geçerli bir http:// adresi girin."); return; }
-      localStorage.setItem("vi_srv", v);
-      window.location.href = v;
-    });
+    const qInput = document.getElementById("qInput");
+    const qualitySelect = document.getElementById("qualitySelect");
+    const searchBtn = document.getElementById("searchBtn");
+    const dlBtn = document.getElementById("dlBtn");
+    const previewBox = document.getElementById("previewBox");
+    const thumbImg = document.getElementById("thumbImg");
+    const vTitle = document.getElementById("vTitle");
+    const vSub = document.getElementById("vSub");
+    const resultsBox = document.getElementById("resultsBox");
+    const progBox = document.getElementById("progBox");
+    const progLabel = document.getElementById("progLabel");
+    const progPct = document.getElementById("progPct");
+    const progBar = document.getElementById("progBar");
+    const statusMsg = document.getElementById("statusMsg");
+
+    function setBusy(busy) {
+      searchBtn.disabled = busy;
+      dlBtn.disabled = busy;
+    }
+
+    function runSearchOrInfo() {
+      const val = qInput.value.trim();
+      if (!val) return;
+      setBusy(true);
+      resultsBox.classList.remove("visible");
+      previewBox.classList.remove("visible");
+      if (/^https?:\/\//i.test(val)) {
+        searchBtn.textContent = "Yükleniyor...";
+        AndroidApp.getInfo(val);
+      } else {
+        searchBtn.textContent = "Aranıyor...";
+        AndroidApp.search(val, 25);
+      }
+    }
+
+    function startDl(urlOverride) {
+      const val = (urlOverride || qInput.value).trim();
+      if (!val) return;
+      if (!/^https?:\/\//i.test(val)) {
+        runSearchOrInfo();
+        return;
+      }
+      setBusy(true);
+      progBox.classList.add("visible");
+      progBar.style.width = "0%";
+      progPct.textContent = "0%";
+      progLabel.textContent = "İndirme başlatılıyor...";
+      statusMsg.className = "msg";
+      statusMsg.textContent = "";
+      AndroidApp.download(val, qualitySelect.value);
+    }
+
+    window.onSearchResults = function(jsonStr) {
+      setBusy(false);
+      searchBtn.textContent = "Ara / Önizle";
+      const data = JSON.parse(jsonStr);
+      resultsBox.innerHTML = "";
+      if (!data.ok) {
+        progBox.classList.add("visible");
+        statusMsg.className = "msg err";
+        statusMsg.textContent = data.error || "Arama başarısız.";
+        return;
+      }
+      for (const item of data.results || []) {
+        const row = document.createElement("div");
+        row.className = "res-item";
+        row.innerHTML = `<img src="${item.thumbnail || ""}" /><div class="res-meta"><h4>${item.title}</h4><p>${item.uploader}</p></div>`;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "İndir";
+        btn.style.padding = "8px 12px";
+        btn.style.fontSize = "12.5px";
+        btn.addEventListener("click", () => {
+          qInput.value = item.url;
+          resultsBox.classList.remove("visible");
+          startDl(item.url);
+        });
+        row.appendChild(btn);
+        resultsBox.appendChild(row);
+      }
+      resultsBox.classList.add("visible");
+    };
+
+    window.onVideoInfo = function(jsonStr) {
+      setBusy(false);
+      searchBtn.textContent = "Ara / Önizle";
+      const data = JSON.parse(jsonStr);
+      if (!data.ok) {
+        progBox.classList.add("visible");
+        statusMsg.className = "msg err";
+        statusMsg.textContent = data.error || "Bilgi alınamadı.";
+        return;
+      }
+      thumbImg.src = data.thumbnail || "";
+      vTitle.textContent = data.title;
+      vSub.textContent = `${data.platform} • ${data.uploader}`;
+      previewBox.classList.add("visible");
+    };
+
+    window.onDownloadProgress = function(pct, text) {
+      progBar.style.width = `${pct}%`;
+      progPct.textContent = `${pct}%`;
+      progLabel.textContent = text;
+    };
+
+    window.onDownloadDone = function(jsonStr) {
+      setBusy(false);
+      const data = JSON.parse(jsonStr);
+      if (data.ok) {
+        progBar.style.width = "100%";
+        progPct.textContent = "100%";
+        progLabel.textContent = "Tamamlandı!";
+        statusMsg.className = "msg ok";
+        statusMsg.textContent = `Kaydedildi: ${data.saved_path || data.filename}`;
+      } else {
+        progLabel.textContent = "Hata";
+        statusMsg.className = "msg err";
+        statusMsg.textContent = data.error || "İndirme başarısız.";
+      }
+    };
+
+    searchBtn.addEventListener("click", runSearchOrInfo);
+    dlBtn.addEventListener("click", () => startDl());
   </script>
 </body>
 </html>
