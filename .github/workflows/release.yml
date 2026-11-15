@@ -1,0 +1,82 @@
+name: Build and Release All Platforms
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - run: |
+          pyinstaller --noconfirm --onefile --windowed --name VideoIndirici --add-data "static;static" desktop.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/VideoIndirici.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - run: |
+          pyinstaller --noconfirm --windowed --name VideoIndirici --add-data "static:static" desktop.py
+          cd dist && zip -r VideoIndirici-macOS.zip VideoIndirici.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-zip
+          path: dist/VideoIndirici-macOS.zip
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Build Android APK
+        working-directory: android
+        run: |
+          gradle assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk VideoIndirici.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: android/VideoIndirici.apk
+
+  publish-release:
+    needs: [build-windows, build-macos, build-android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/windows-exe/VideoIndirici.exe
+            artifacts/macos-zip/VideoIndirici-macOS.zip
+            artifacts/android-apk/VideoIndirici.apk
+          generate_release_notes: true
