@@ -1,5 +1,5 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "download_url": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
   "downloads": {
     "windows": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
@@ -7,5 +7,5 @@
     "android": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.apk",
     "ios": "./app.html"
   },
-  "notes": "v1.2.0: Android APK artık bilgisayara ihtiyaç duymadan tamamen bağımsız çalışır (dahili yt-dlp + YouTube arama + İndirilenler'e kayıt)."
+  "notes": "v1.3.0: Yeni uygulama ikonu (YouTube + indirme logosu) ve Android uygulama içi güncelleme kontrolü."
 }

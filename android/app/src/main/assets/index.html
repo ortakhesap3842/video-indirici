@@ -92,10 +92,17 @@
       <div class="badges">
         <span class="badge yt">YouTube</span>
         <span class="badge ig">Instagram</span>
-        <span class="badge ok">Bağımsız • v1.2.0</span>
+        <span class="badge ok">Bağımsız • v1.3.0</span>
       </div>
       <h1>Video İndirici</h1>
       <p class="sub">Bilgisayara gerek duymadan doğrudan telefonunuza indirin.</p>
+    </div>
+
+    <div id="updateBanner" class="card" style="display:none; background:rgba(99,102,241,0.18); border-color:rgba(129,140,248,0.45);">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <span id="updateText" style="font-size:13px; font-weight:600;">Yeni sürüm mevcut!</span>
+        <a id="updateLink" href="#" style="background:#6366f1; color:white; text-decoration:none; padding:8px 12px; border-radius:9px; font-size:12.5px; font-weight:700; white-space:nowrap;">Güncelle</a>
+      </div>
     </div>
 
     <div class="card">
@@ -256,6 +263,18 @@
 
     searchBtn.addEventListener("click", runSearchOrInfo);
     dlBtn.addEventListener("click", () => startDl());
+
+    const CURRENT_VER = "1.3.0";
+    fetch("https://ortakhesap3842.github.io/video-indirici/version.json?t=" + Date.now())
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.version && d.version !== CURRENT_VER && d.downloads && d.downloads.android) {
+          document.getElementById("updateText").textContent = `Yeni sürüm: v${d.version}`;
+          document.getElementById("updateLink").href = d.downloads.android;
+          document.getElementById("updateBanner").style.display = "flex";
+        }
+      })
+      .catch(() => {});
   </script>
 </body>
 </html>
