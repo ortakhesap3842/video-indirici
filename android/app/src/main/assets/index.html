@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Video İndirici — Android</title>
+  <style>
+    :root { --bg:#050811; --card:#0f172a; --border:rgba(255,255,255,0.1); --text:#f8fafc; --muted:#94a3b8; --accent:#6366f1; }
+    * { box-sizing:border-box; margin:0; padding:0; font-family:sans-serif; }
+    body { min-height:100vh; background:var(--bg); color:var(--text); padding:24px 16px; }
+    .wrap { max-width:480px; margin:0 auto; display:flex; flex-direction:column; gap:14px; }
+    h1 { font-size:22px; text-align:center; }
+    p { font-size:13px; color:var(--muted); text-align:center; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px; display:flex; flex-direction:column; gap:12px; }
+    input { width:100%; background:#050811; border:1px solid var(--border); border-radius:10px; padding:12px; color:var(--text); font-size:14px; }
+    button { width:100%; border:none; border-radius:10px; padding:13px; background:var(--accent); color:#fff; font-size:14px; font-weight:700; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Video İndirici (Android)</h1>
+    <p>Bilgisayarınızdaki Video İndirici sunucusuna bağlanın</p>
+    <div class="card">
+      <input id="srv" type="url" placeholder="http://192.168.1.X:PORT" />
+      <button id="go" type="button">Bağlan ve İndir</button>
+    </div>
+  </div>
+  <script>
+    const inp = document.getElementById("srv");
+    const saved = localStorage.getItem("vi_srv");
+    if (saved) inp.value = saved;
+    document.getElementById("go").addEventListener("click", () => {
+      const v = inp.value.trim().replace(/\/+$/, "");
+      if (!v.startsWith("http")) { alert("Geçerli bir http:// adresi girin."); return; }
+      localStorage.setItem("vi_srv", v);
+      window.location.href = v;
+    });
+  </script>
+</body>
+</html>

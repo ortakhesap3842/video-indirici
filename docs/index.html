@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="./manifest.json" />
+  <title>Video İndirici — Tüm Cihazlar İçin İndir</title>
+  <style>
+    :root {
+      --bg: #050811;
+      --card: rgba(15, 23, 42, 0.78);
+      --border: rgba(255, 255, 255, 0.1);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #6366f1;
+      --accent-2: #ec4899;
+      --android: #22c55e;
+      --ios: #e2e8f0;
+      --windows: #38bdf8;
+      --mac: #c084fc;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 15% 10%, rgba(99, 102, 241, 0.25), transparent 38%),
+        radial-gradient(circle at 85% 30%, rgba(236, 72, 153, 0.16), transparent 40%),
+        var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .nav {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 20px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 18px;
+    }
+
+    .brand-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: grid;
+      place-items: center;
+      font-size: 16px;
+    }
+
+    .nav-links { display: flex; gap: 22px; align-items: center; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; }
+    .nav-links a:hover { color: var(--text); }
+
+    .container {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 28px 20px 72px;
+    }
+
+    .hero {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(99, 102, 241, 0.14);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      color: #c7d2fe;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-size: clamp(30px, 5vw, 48px);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.12;
+      margin-bottom: 14px;
+      background: linear-gradient(135deg, #ffffff 35%, #c7d2fe 75%, #f9a8d4 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .lead {
+      color: var(--muted);
+      font-size: 16.5px;
+      max-width: 600px;
+      margin: 0 auto 12px;
+    }
+
+    .meta { font-size: 13px; color: var(--muted); }
+
+    /* 2x2 İndirme Izgarası (Çizime Uygun) */
+    .download-matrix {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 24px;
+      overflow: hidden;
+      background: var(--card);
+      backdrop-filter: blur(20px);
+      box-shadow: 0 28px 70px rgba(0, 0, 0, 0.5);
+      margin-bottom: 56px;
+    }
+
+    .platform-cell {
+      padding: 36px 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      transition: background 0.2s, transform 0.2s;
+      cursor: pointer;
+    }
+
+    .platform-cell:hover {
+      background: rgba(255, 255, 255, 0.045);
+    }
+
+    .plat-badge {
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    .plat-android .plat-badge { color: var(--android); background: rgba(34, 197, 94, 0.14); }
+    .plat-ios .plat-badge { color: var(--ios); background: rgba(226, 232, 240, 0.14); }
+    .plat-win .plat-badge { color: var(--windows); background: rgba(56, 189, 248, 0.14); }
+    .plat-mac .plat-badge { color: var(--mac); background: rgba(192, 132, 252, 0.14); }
+
+    .plat-icon {
+      font-size: 36px;
+      line-height: 1;
+    }
+
+    .plat-title {
+      font-size: 21px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+    }
+
+    .plat-sub {
+      font-size: 13px;
+      color: var(--muted);
+      max-width: 240px;
+    }
+
+    .plat-btn {
+      margin-top: 6px;
+      padding: 10px 20px;
+      border-radius: 12px;
+      font-size: 13.5px;
+      font-weight: 700;
+      background: var(--accent);
+      color: white;
+      box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+    }
+
+    .plat-android .plat-btn { background: #16a34a; box-shadow: 0 8px 20px rgba(34, 197, 94, 0.25); }
+    .plat-ios .plat-btn { background: #334155; box-shadow: none; }
+    .plat-win .plat-btn { background: #0284c7; box-shadow: 0 8px 20px rgba(56, 189, 248, 0.25); }
+    .plat-mac .plat-btn { background: #7e22ce; box-shadow: 0 8px 20px rgba(192, 132, 252, 0.25); }
+
+    .section-title {
+      text-align: center;
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 24px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 22px;
+    }
+    .card h3 { font-size: 16px; margin-bottom: 6px; }
+    .card p { font-size: 13.5px; color: var(--muted); }
+
+    /* iOS Kurulum Modalı */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 8, 17, 0.8);
+      backdrop-filter: blur(8px);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+    .modal-backdrop.visible { display: flex; }
+    .modal {
+      width: 100%;
+      max-width: 420px;
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 20px;
+      padding: 24px;
+      text-align: left;
+    }
+    .modal h3 { font-size: 18px; margin-bottom: 10px; }
+    .modal ol { padding-left: 18px; color: var(--muted); font-size: 13.5px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+    .modal-actions { display: flex; gap: 10px; }
+    .modal-actions a, .modal-actions button {
+      flex: 1;
+      text-align: center;
+      text-decoration: none;
+      border: none;
+      border-radius: 11px;
+      padding: 11px;
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-sec { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+
+    footer {
+      text-align: center;
+      padding: 28px 20px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 640px) {
+      .nav-links { display: none; }
+      .download-matrix { grid-template-columns: 1fr; }
+      .platform-cell { padding: 28px 20px; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="brand">
+      <div class="brand-icon">▶</div>
+      <span>Video İndirici</span>
+    </div>
+    <div class="nav-links">
+      <a href="#indir">İndir</a>
+      <a href="#ozellikler">Özellikler</a>
+      <a href="./app.html">Mobil Web App</a>
+    </div>
+  </nav>
+
+  <main class="container">
+    <section class="hero">
+      <div class="pill" id="versionPill">Sürüm v1.1.0 • Tüm Cihazlar</div>
+      <h1>Cihazınızı Seçin ve Hemen İndirin</h1>
+      <p class="lead">
+        YouTube ve Instagram videolarını MP4 veya MP3 olarak indirin; telefonunuzdan ve bilgisayarınızdan kolayca erişin.
+      </p>
+      <div class="meta" id="releaseNotes">Android APK • iOS Ana Ekran Uygulaması • Windows EXE • macOS</div>
+    </section>
+
+    <section id="indir" class="download-matrix" aria-label="Platform İndirme Seçenekleri">
+      <!-- Sol Üst: Android -->
+      <a id="androidLink" class="platform-cell plat-android" href="https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.apk">
+        <span class="plat-badge">Telefon • .APK</span>
+        <div class="plat-icon">🤖</div>
+        <div class="plat-title">Android'e İndir</div>
+        <div class="plat-sub">Android telefon ve tabletler için doğrudan APK kurulum dosyası.</div>
+        <span class="plat-btn">APK İndir</span>
+      </a>
+
+      <!-- Sağ Üst: iOS -->
+      <button id="iosBtn" type="button" class="platform-cell plat-ios">
+        <span class="plat-badge">iPhone / iPad</span>
+        <div class="plat-icon">📱</div>
+        <div class="plat-title">iOS'a İndir</div>
+        <div class="plat-sub">Safari üzerinden Ana Ekrana Ekle ile uygulama gibi kurun.</div>
+        <span class="plat-btn">iOS Kurulumu</span>
+      </button>
+
+      <!-- Sol Alt: Windows -->
+      <a id="windowsLink" class="platform-cell plat-win" href="https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe">
+        <span class="plat-badge">Bilgisayar • .EXE</span>
+        <div class="plat-icon">🪟</div>
+        <div class="plat-title">Windows'a İndir</div>
+        <div class="plat-sub">Windows 10 / 11 (64-bit) için tek dosyalık masaüstü uygulaması.</div>
+        <span class="plat-btn">EXE İndir</span>
+      </a>
+
+      <!-- Sağ Alt: Mac -->
+      <a id="macLink" class="platform-cell plat-mac" href="https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici-macOS.zip">
+        <span class="plat-badge">Bilgisayar • macOS</span>
+        <div class="plat-icon">🍎</div>
+        <div class="plat-title">Mac'e İndir</div>
+        <div class="plat-sub">Apple Silicon & Intel Mac bilgisayarlar için masaüstü paketi.</div>
+        <span class="plat-btn">Mac İndir</span>
+      </a>
+    </section>
+
+    <section id="ozellikler">
+      <h2 class="section-title">Özellikler</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>YouTube & Instagram</h3>
+          <p>Shorts, Reels, normal videolar ve MP3 ses indirmelerini tek arayüzde destekler.</p>
+        </div>
+        <div class="card">
+          <h3>Telefondan QR ile İzle</h3>
+          <p>Bilgisayara indirdiğiniz videoları Wi-Fi üzerinden QR okutarak telefonunuzda açın.</p>
+        </div>
+        <div class="card">
+          <h3>Otomatik Güncelleme</h3>
+          <p>Yeni sürüm yayınlandığında uygulama içinden tek tıkla güncelleyin.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="iosModal" class="modal-backdrop">
+    <div class="modal">
+      <h3>iPhone / iPad'e Kurulum</h3>
+      <ol>
+        <li>Aşağıdaki <strong>Mobil Uygulamayı Aç</strong> butonuna dokunun (Safari ile açın).</li>
+        <li>Alt menüdeki <strong>Paylaş</strong> simgesine dokunun.</li>
+        <li><strong>Ana Ekrana Ekle</strong> seçeneğini seçip onaylayın; uygulama simgesi ana ekranınıza eklenecektir.</li>
+      </ol>
+      <div class="modal-actions">
+        <a class="btn-primary" href="./app.html">Mobil Uygulamayı Aç</a>
+        <button id="closeIosBtn" class="btn-sec" type="button">Kapat</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Video İndirici • Android, iOS, Windows & Mac
+  </footer>
+
+  <script>
+    const iosBtn = document.getElementById("iosBtn");
+    const iosModal = document.getElementById("iosModal");
+    const closeIosBtn = document.getElementById("closeIosBtn");
+
+    iosBtn.addEventListener("click", () => iosModal.classList.add("visible"));
+    closeIosBtn.addEventListener("click", () => iosModal.classList.remove("visible"));
+    iosModal.addEventListener("click", (e) => {
+      if (e.target === iosModal) iosModal.classList.remove("visible");
+    });
+
+    fetch("./version.json")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.version) {
+          document.getElementById("versionPill").textContent = `Sürüm v${data.version} • Tüm Cihazlar`;
+        }
+        if (data.downloads) {
+          if (data.downloads.android) document.getElementById("androidLink").href = data.downloads.android;
+          if (data.downloads.windows) document.getElementById("windowsLink").href = data.downloads.windows;
+          if (data.downloads.mac) document.getElementById("macLink").href = data.downloads.mac;
+        }
+        if (data.notes) {
+          document.getElementById("releaseNotes").textContent = data.notes;
+        }
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>

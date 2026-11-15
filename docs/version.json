@@ -1,0 +1,11 @@
+{
+  "version": "1.1.0",
+  "download_url": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
+  "downloads": {
+    "windows": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
+    "mac": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici-macOS.zip",
+    "android": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.apk",
+    "ios": "./app.html"
+  },
+  "notes": "v1.1.0: Telefondan QR ile izleme, 4 platformlu indirme sitesi (Android APK, iOS PWA, Windows, Mac) ve arayüz iyileştirmeleri."
+}

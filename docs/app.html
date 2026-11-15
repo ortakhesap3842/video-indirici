@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Video İndirici" />
+  <link rel="manifest" href="./manifest.json" />
+  <title>Video İndirici — Mobil</title>
+  <style>
+    :root {
+      --bg: #050811;
+      --card: rgba(15, 23, 42, 0.85);
+      --border: rgba(255, 255, 255, 0.1);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #6366f1;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif; }
+    body {
+      min-height: 100vh;
+      background: radial-gradient(circle at top, rgba(99, 102, 241, 0.25), transparent 45%), var(--bg);
+      color: var(--text);
+      padding: 24px 16px 40px;
+    }
+    .wrap { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+    h1 { font-size: 24px; font-weight: 800; text-align: center; }
+    p.sub { font-size: 13.5px; color: var(--muted); text-align: center; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    label { font-size: 13px; color: var(--muted); font-weight: 600; }
+    input {
+      width: 100%;
+      background: rgba(5, 8, 17, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+    }
+    button {
+      width: 100%;
+      border: none;
+      border-radius: 12px;
+      padding: 13px;
+      background: var(--accent);
+      color: white;
+      font-size: 14.5px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .hint { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+    a.back { color: #a5b4fc; text-align: center; font-size: 13px; text-decoration: none; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Video İndirici Mobil</h1>
+    <p class="sub">Bilgisayarınızdaki Video İndirici uygulamasına bağlanın</p>
+
+    <div class="card">
+      <label for="serverUrl">Bilgisayar Sunucu Adresi (QR'dan veya IP'den)</label>
+      <input id="serverUrl" type="url" placeholder="Örn: http://192.168.1.35:51234" />
+      <button id="connectBtn" type="button">Bağlan ve Videoları Aç</button>
+      <p class="hint">
+        Bilgisayarınızda <strong>Video İndirici</strong> uygulamasını açıp <strong>Telefondan Aç (QR)</strong> butonuna bastığınızda görünen adresi buraya yazabilir veya QR kodu okutabilirsiniz.
+      </p>
+    </div>
+
+    <a class="back" href="./index.html">← İndirme Sayfasına Dön</a>
+  </div>
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./sw.js").catch(() => {});
+    }
+    const input = document.getElementById("serverUrl");
+    const saved = localStorage.getItem("vi_server_url");
+    if (saved) input.value = saved;
+
+    document.getElementById("connectBtn").addEventListener("click", () => {
+      const val = input.value.trim().replace(/\/+$/, "");
+      if (!val.startsWith("http")) {
+        alert("Geçerli bir http:// adresi girin.");
+        return;
+      }
+      localStorage.setItem("vi_server_url", val);
+      window.location.href = val.endsWith("/telefon") ? val : `${val}/telefon`;
+    });
+  </script>
+</body>
+</html>
