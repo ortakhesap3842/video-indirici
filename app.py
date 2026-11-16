@@ -368,6 +368,9 @@ def apply_update(req: ApplyUpdateRequest) -> JSONResponse:
         pid = os.getpid()
         bat_content = (
             "@echo off\n"
+            "set _MEIPASS2=\n"
+            "set PYTHONHOME=\n"
+            "set PYTHONPATH=\n"
             f"timeout /t 2 /nobreak >nul\n"
             f":waitloop\n"
             f"tasklist /FI \"PID eq {pid}\" 2>NUL | find /I \"{pid}\" >NUL\n"
@@ -375,13 +378,19 @@ def apply_update(req: ApplyUpdateRequest) -> JSONResponse:
             f"  timeout /t 1 /nobreak >nul\n"
             f"  goto waitloop\n"
             f")\n"
+            f"timeout /t 1 /nobreak >nul\n"
             f"move /Y \"{new_exe}\" \"{current_exe}\"\n"
             f"start \"\" \"{current_exe}\"\n"
             f"del \"%~f0\"\n"
         )
         updater_bat.write_text(bat_content, encoding="utf-8")
+        clean_env = os.environ.copy()
+        clean_env.pop("_MEIPASS2", None)
+        clean_env.pop("PYTHONHOME", None)
+        clean_env.pop("PYTHONPATH", None)
         subprocess.Popen(
             ["cmd", "/c", str(updater_bat)],
+            env=clean_env,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
         )
 

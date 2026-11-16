@@ -5,6 +5,9 @@ import threading
 import time
 import urllib.request
 
+if sys.platform == "win32":
+    import _overlapped  # noqa: F401
+
 import uvicorn
 import webview
 
