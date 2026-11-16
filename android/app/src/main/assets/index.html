@@ -92,7 +92,7 @@
       <div class="badges">
         <span class="badge yt">YouTube</span>
         <span class="badge ig">Instagram</span>
-        <span class="badge ok">Bağımsız • v1.3.1</span>
+        <span class="badge ok">Bağımsız • v1.3.2</span>
       </div>
       <h1>Video İndirici</h1>
       <p class="sub">Bilgisayara gerek duymadan doğrudan telefonunuza indirin.</p>
@@ -264,7 +264,7 @@
     searchBtn.addEventListener("click", runSearchOrInfo);
     dlBtn.addEventListener("click", () => startDl());
 
-    const CURRENT_VER = "1.3.1";
+    const CURRENT_VER = "1.3.2";
     fetch("https://ortakhesap3842.github.io/video-indirici/version.json?t=" + Date.now())
       .then((r) => r.json())
       .then((d) => {
