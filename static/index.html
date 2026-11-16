@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Video İndirici — YouTube & Instagram</title>
+  <link rel="stylesheet" href="/static/shared_ui.css" />
+  <script src="/static/shared_ui.js"></script>
   <style>
     :root {
       --bg: #070b14;
@@ -767,55 +769,27 @@
           searchResults.classList.remove("visible");
           return;
         }
-        for (const item of data.results) {
-          const row = document.createElement("div");
-          row.className = "search-item";
-
-          const img = document.createElement("img");
-          img.src = item.thumbnail || "";
-          img.alt = item.title;
-
-          const info = document.createElement("div");
-          info.className = "search-info";
-          const h4 = document.createElement("h4");
-          h4.textContent = item.title;
-          const p = document.createElement("p");
-          const dur = formatDuration(item.duration);
-          p.textContent = `${item.uploader}${dur ? " • " + dur : ""}`;
-          info.appendChild(h4);
-          info.appendChild(p);
-
-          const actions = document.createElement("div");
-          actions.className = "search-actions";
-
-          const selBtn = document.createElement("button");
-          selBtn.className = "mini-btn";
-          selBtn.type = "button";
-          selBtn.textContent = "Önizle";
-          selBtn.addEventListener("click", () => {
+        VideoIndiriciUI.renderSearchResults(searchResults, data.results, {
+          rowClass: "search-item",
+          infoClass: "search-info",
+          titleTag: "h4",
+          metaTag: "p",
+          actionsClass: "search-actions",
+          previewBtnClass: "mini-btn",
+          btnClass: "mini-btn",
+          dlBtnStyle: "background: var(--accent);",
+          showPreview: true,
+          onPreview: (item) => {
             urlInput.value = item.url;
             searchResults.classList.remove("visible");
             fetchInfo();
-          });
-
-          const dlBtn = document.createElement("button");
-          dlBtn.className = "mini-btn";
-          dlBtn.style.background = "var(--accent)";
-          dlBtn.type = "button";
-          dlBtn.textContent = "İndir";
-          dlBtn.addEventListener("click", () => {
+          },
+          onDownload: (item) => {
             urlInput.value = item.url;
             searchResults.classList.remove("visible");
             startDownload();
-          });
-
-          actions.appendChild(selBtn);
-          actions.appendChild(dlBtn);
-          row.appendChild(img);
-          row.appendChild(info);
-          row.appendChild(actions);
-          searchResults.appendChild(row);
-        }
+          }
+        });
         if (data.results.length >= limit && limit < 60) {
           const moreBtn = document.createElement("button");
           moreBtn.className = "secondary";

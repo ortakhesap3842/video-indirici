@@ -9,6 +9,8 @@
   <link rel="manifest" href="./manifest.json" />
   <link rel="apple-touch-icon" href="./icon.png" />
   <title>Video İndirici — iOS</title>
+  <link rel="stylesheet" href="./shared_ui.css" />
+  <script src="./shared_ui.js"></script>
   <style>
     :root {
       --bg: #050811;
@@ -215,11 +217,7 @@
     }
 
     function fmtDur(sec) {
-      if (!sec) return "";
-      sec = Math.floor(sec);
-      const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
-      const pad = (n) => String(n).padStart(2, "0");
-      return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+      return VideoIndiriciUI.formatDuration(sec);
     }
 
     async function apiFetch(path, options = {}) {
@@ -323,39 +321,20 @@
             return;
           }
           resultsCard.style.display = "flex";
-          items.forEach((it) => {
-            const row = document.createElement("div");
-            row.className = "res-item";
-            const img = document.createElement("img");
-            img.alt = "";
-            img.src = it.thumbnail || "";
-            const info = document.createElement("div");
-            info.className = "res-info";
-            const titleEl = document.createElement("div");
-            titleEl.className = "res-title";
-            titleEl.textContent = it.title || "";
-            const metaEl = document.createElement("div");
-            metaEl.className = "res-meta";
-            metaEl.textContent = `${it.uploader || ""} ${fmtDur(it.duration)}`.trim();
-            info.appendChild(titleEl);
-            info.appendChild(metaEl);
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.className = "btn-primary btn-sm";
-            btn.textContent = "İndir";
-            btn.addEventListener("click", (e) => {
-              e.stopPropagation();
+          VideoIndiriciUI.renderSearchResults(resultsCard, items, {
+            rowClass: "res-item",
+            infoClass: "res-info",
+            titleClass: "res-title",
+            metaClass: "res-meta",
+            btnClass: "btn-primary btn-sm",
+            onDownload: (it) => {
               qInput.value = it.url;
               startDownload(it.url);
-            });
-            row.appendChild(img);
-            row.appendChild(info);
-            row.appendChild(btn);
-            row.addEventListener("click", () => {
+            },
+            onSelect: (it) => {
               qInput.value = it.url;
               resultsCard.style.display = "none";
-            });
-            resultsCard.appendChild(row);
+            }
           });
         }
       } catch (err) {

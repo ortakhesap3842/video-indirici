@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>Video İndirici</title>
+  <link rel="stylesheet" href="./shared_ui.css" />
+  <script src="./shared_ui.js"></script>
   <style>
     :root {
       --bg: #070b14;
@@ -206,34 +208,18 @@
         statusMsg.textContent = data.error || "Arama başarısız.";
         return;
       }
-      for (const item of data.results || []) {
-        const row = document.createElement("div");
-        row.className = "res-item";
-        const img = document.createElement("img");
-        img.src = item.thumbnail || "";
-        const meta = document.createElement("div");
-        meta.className = "res-meta";
-        const h4 = document.createElement("h4");
-        h4.textContent = item.title || "";
-        const p = document.createElement("p");
-        p.textContent = item.uploader || "";
-        meta.appendChild(h4);
-        meta.appendChild(p);
-        row.appendChild(img);
-        row.appendChild(meta);
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.textContent = "İndir";
-        btn.style.padding = "8px 12px";
-        btn.style.fontSize = "12.5px";
-        btn.addEventListener("click", () => {
+      VideoIndiriciUI.renderSearchResults(resultsBox, data.results, {
+        rowClass: "res-item",
+        infoClass: "res-meta",
+        titleTag: "h4",
+        metaTag: "p",
+        dlBtnStyle: "padding:8px 12px; font-size:12.5px;",
+        onDownload: (item) => {
           qInput.value = item.url;
           resultsBox.classList.remove("visible");
           startDl(item.url);
-        });
-        row.appendChild(btn);
-        resultsBox.appendChild(row);
-      }
+        }
+      });
       resultsBox.classList.add("visible");
     };
 

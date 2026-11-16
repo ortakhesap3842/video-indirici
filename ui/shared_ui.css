@@ -1,0 +1,12 @@
+:root {
+  --vi-bg: #050811;
+  --vi-card: rgba(15, 23, 42, 0.88);
+  --vi-border: rgba(255, 255, 255, 0.1);
+  --vi-text: #f8fafc;
+  --vi-muted: #94a3b8;
+  --vi-accent: #6366f1;
+  --vi-accent-hover: #4f46e5;
+  --vi-pink: #ec4899;
+  --vi-ok: #34d399;
+  --vi-err: #fb7185;
+}
