@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir "fastapi>=0.115.0" "uvicorn>=0.32.0" "yt-dlp>=2024.10.0" "qrcode>=7.4"
 
 COPY app.py version.py ./
+COPY backend ./backend
 COPY static ./static
 
 EXPOSE 8080
