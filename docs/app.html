@@ -2,100 +2,450 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Video İndirici" />
   <link rel="manifest" href="./manifest.json" />
-  <title>Video İndirici — Mobil</title>
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <title>Video İndirici — iOS</title>
   <style>
     :root {
       --bg: #050811;
-      --card: rgba(15, 23, 42, 0.85);
+      --card: rgba(15, 23, 42, 0.88);
       --border: rgba(255, 255, 255, 0.1);
       --text: #f8fafc;
       --muted: #94a3b8;
       --accent: #6366f1;
+      --pink: #ec4899;
+      --ok: #34d399;
+      --err: #fb7185;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif; }
     body {
       min-height: 100vh;
-      background: radial-gradient(circle at top, rgba(99, 102, 241, 0.25), transparent 45%), var(--bg);
+      background:
+        radial-gradient(circle at 15% 10%, rgba(99, 102, 241, 0.25), transparent 45%),
+        radial-gradient(circle at 85% 90%, rgba(236, 72, 153, 0.18), transparent 45%),
+        var(--bg);
       color: var(--text);
-      padding: 24px 16px 40px;
+      padding: calc(18px + env(safe-area-inset-top)) 14px calc(36px + env(safe-area-inset-bottom));
     }
-    .wrap { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
-    h1 { font-size: 24px; font-weight: 800; text-align: center; }
-    p.sub { font-size: 13.5px; color: var(--muted); text-align: center; }
+    .wrap { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+    .header { text-align: center; padding: 4px 0; }
+    .badges { display: flex; justify-content: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+    .badge {
+      font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+      background: rgba(255,255,255,0.07); border: 1px solid var(--border); color: var(--muted);
+    }
+    .badge.ok { color: #a7f3d0; border-color: rgba(52,211,153,0.35); background: rgba(16,185,129,0.12); }
+    .badge.warn { color: #fde68a; border-color: rgba(245,158,11,0.35); background: rgba(245,158,11,0.12); }
+    h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+    .sub { font-size: 13px; color: var(--muted); margin-top: 3px; }
     .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      padding: 14px; display: flex; flex-direction: column; gap: 10px;
     }
-    label { font-size: 13px; color: var(--muted); font-weight: 600; }
-    input {
-      width: 100%;
-      background: rgba(5, 8, 17, 0.9);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px 14px;
-      color: var(--text);
-      font-size: 14px;
-      outline: none;
+    .row { display: flex; gap: 8px; align-items: center; }
+    input, select {
+      width: 100%; background: rgba(5, 8, 17, 0.92); border: 1px solid var(--border);
+      border-radius: 11px; padding: 11px 12px; color: var(--text); font-size: 14px; outline: none;
     }
-    button {
-      width: 100%;
-      border: none;
-      border-radius: 12px;
-      padding: 13px;
-      background: var(--accent);
-      color: white;
-      font-size: 14.5px;
-      font-weight: 700;
-      cursor: pointer;
+    input:focus, select:focus { border-color: rgba(129,140,248,0.65); }
+    button, .btn-link {
+      border: none; border-radius: 11px; padding: 11px 14px; font-size: 14px; font-weight: 700;
+      cursor: pointer; color: white; white-space: nowrap; text-decoration: none; text-align: center;
     }
-    .hint { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
-    a.back { color: #a5b4fc; text-align: center; font-size: 13px; text-decoration: none; margin-top: 6px; }
+    .btn-primary { background: linear-gradient(135deg, #6366f1, #4f46e5); }
+    .btn-secondary { background: rgba(255,255,255,0.09); border: 1px solid var(--border); color: var(--text); }
+    .btn-sm { padding: 8px 11px; font-size: 12.5px; }
+    .prog-wrap { display: none; flex-direction: column; gap: 6px; }
+    .prog-bar { height: 7px; border-radius: 999px; background: rgba(255,255,255,0.1); overflow: hidden; }
+    .prog-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #6366f1, #ec4899); transition: width .2s; }
+    .prog-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+    .msg { font-size: 13px; line-height: 1.45; }
+    .msg.ok { color: var(--ok); }
+    .msg.err { color: var(--err); }
+    .results { display: none; flex-direction: column; gap: 8px; }
+    .res-item {
+      display: flex; gap: 10px; align-items: center; padding: 8px; border-radius: 12px;
+      background: rgba(5,8,17,0.65); border: 1px solid rgba(255,255,255,0.07);
+    }
+    .res-item img { width: 88px; height: 50px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+    .res-info { flex: 1; min-width: 0; }
+    .res-title { font-size: 13px; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .res-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+    .info-card { display: none; gap: 10px; align-items: center; }
+    .info-card img { width: 96px; height: 54px; object-fit: cover; border-radius: 9px; flex-shrink: 0; }
+    label { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .hint { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .hint a { color: #a5b4fc; }
+    .footer-links { display: flex; justify-content: space-between; align-items: center; padding: 2px 4px; }
+    .footer-links a, .footer-links button { background: none; border: none; color: #a5b4fc; font-size: 12.5px; font-weight: 600; padding: 4px; text-decoration: none; cursor: pointer; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>Video İndirici Mobil</h1>
-    <p class="sub">Bilgisayarınızdaki Video İndirici uygulamasına bağlanın</p>
+    <div class="header">
+      <div class="badges">
+        <span class="badge">YouTube & Instagram</span>
+        <span class="badge">iOS • v1.3.7</span>
+        <span id="connBadge" class="badge warn">Sunucu Ayarlanmadı</span>
+      </div>
+      <h1>Video İndirici</h1>
+      <p class="sub">Bilgisayar kapalıyken bile iPhone'unuza video indirin.</p>
+    </div>
 
-    <div class="card">
-      <label for="serverUrl">Bilgisayar Sunucu Adresi (QR'dan veya IP'den)</label>
-      <input id="serverUrl" type="url" placeholder="Örn: http://192.168.1.35:51234" />
-      <button id="connectBtn" type="button">Bağlan ve Videoları Aç</button>
+    <div id="setupCard" class="card">
+      <div class="row" style="justify-content:space-between;">
+        <strong style="font-size:14px;">Bulut Sunucu Bağlantısı</strong>
+        <button id="closeSetupBtn" type="button" class="btn-secondary btn-sm" style="display:none;">Gizle</button>
+      </div>
+      <div>
+        <label for="serverUrl">Sunucu Adresi (HTTPS)</label>
+        <input id="serverUrl" type="url" placeholder="Örn: https://video-indirici-server.onrender.com" autocomplete="off" autocapitalize="none" />
+      </div>
+      <div>
+        <label for="accessKey">Erişim Anahtarı (CLOUD_ACCESS_KEY)</label>
+        <input id="accessKey" type="password" placeholder="Bulut sunucunuzdaki gizli anahtar" autocomplete="off" />
+      </div>
+      <button id="saveConnBtn" type="button" class="btn-primary">Bağlan ve Kaydet</button>
+      <p id="connMsg" class="msg" style="display:none;"></p>
       <p class="hint">
-        Bilgisayarınızda <strong>Video İndirici</strong> uygulamasını açıp <strong>Telefondan Aç (QR)</strong> butonuna bastığınızda görünen adresi buraya yazabilir veya QR kodu okutabilirsiniz.
+        Kişisel bulut sunucunuz henüz yoksa ücretsiz oluşturabilirsiniz:
+        <a href="https://render.com/deploy?repo=https://github.com/ortakhesap3842/video-indirici" target="_blank" rel="noopener">Render'da Tek Tıkla Sunucu Kur →</a>
+        <br />Kurulum bitince Render'daki <strong>Environment → CLOUD_ACCESS_KEY</strong> değerini ve sunucu adresini buraya bir kez girmeniz yeterlidir.
       </p>
     </div>
 
-    <a class="back" href="./index.html">← İndirme Sayfasına Dön</a>
+    <div class="card">
+      <input id="qInput" type="text" placeholder="YouTube'da video adı arayın veya URL yapıştırın..." />
+      <div class="row">
+        <select id="qualitySelect">
+          <option value="best">En İyi MP4</option>
+          <option value="1080">1080p MP4</option>
+          <option value="720">720p MP4</option>
+          <option value="480">480p MP4</option>
+          <option value="audio">Sadece Ses (MP3)</option>
+        </select>
+        <button id="searchBtn" type="button" class="btn-secondary">Ara</button>
+        <button id="dlBtn" type="button" class="btn-primary">İndir</button>
+      </div>
+
+      <div id="infoCard" class="info-card">
+        <img id="infoThumb" alt="" />
+        <div class="res-info">
+          <div id="infoTitle" class="res-title"></div>
+          <div id="infoMeta" class="res-meta"></div>
+        </div>
+      </div>
+
+      <div id="progWrap" class="prog-wrap">
+        <div class="prog-meta">
+          <span id="progStatus">Hazırlanıyor...</span>
+          <span id="progPct">0%</span>
+        </div>
+        <div class="prog-bar"><div id="progFill" class="prog-fill"></div></div>
+        <div id="statusMsg" class="msg"></div>
+        <a id="saveFileBtn" class="btn-link btn-primary" style="display:none;" target="_blank" rel="noopener">Telefona Kaydet / Aç</a>
+      </div>
+    </div>
+
+    <div id="resultsCard" class="card results"></div>
+
+    <div class="footer-links">
+      <a href="./index.html">← İndirme Sayfası</a>
+      <button id="toggleSetupBtn" type="button">⚙ Sunucu Ayarları</button>
+    </div>
   </div>
 
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("./sw.js").catch(() => {});
     }
-    const input = document.getElementById("serverUrl");
-    const saved = localStorage.getItem("vi_server_url");
-    if (saved) input.value = saved;
 
-    document.getElementById("connectBtn").addEventListener("click", () => {
-      const val = input.value.trim().replace(/\/+$/, "");
-      if (!val.startsWith("http")) {
-        alert("Geçerli bir http:// adresi girin.");
+    const setupCard = document.getElementById("setupCard");
+    const closeSetupBtn = document.getElementById("closeSetupBtn");
+    const toggleSetupBtn = document.getElementById("toggleSetupBtn");
+    const connBadge = document.getElementById("connBadge");
+    const serverUrlInput = document.getElementById("serverUrl");
+    const accessKeyInput = document.getElementById("accessKey");
+    const saveConnBtn = document.getElementById("saveConnBtn");
+    const connMsg = document.getElementById("connMsg");
+
+    const qInput = document.getElementById("qInput");
+    const qualitySelect = document.getElementById("qualitySelect");
+    const searchBtn = document.getElementById("searchBtn");
+    const dlBtn = document.getElementById("dlBtn");
+    const infoCard = document.getElementById("infoCard");
+    const infoThumb = document.getElementById("infoThumb");
+    const infoTitle = document.getElementById("infoTitle");
+    const infoMeta = document.getElementById("infoMeta");
+    const progWrap = document.getElementById("progWrap");
+    const progStatus = document.getElementById("progStatus");
+    const progPct = document.getElementById("progPct");
+    const progFill = document.getElementById("progFill");
+    const statusMsg = document.getElementById("statusMsg");
+    const saveFileBtn = document.getElementById("saveFileBtn");
+    const resultsCard = document.getElementById("resultsCard");
+
+    let pollTimer = null;
+
+    function getServerConfig() {
+      return {
+        url: (localStorage.getItem("vi_cloud_url") || "").trim().replace(/\/+$/, ""),
+        key: (localStorage.getItem("vi_cloud_key") || "").trim()
+      };
+    }
+
+    function refreshConnUi(connected) {
+      const cfg = getServerConfig();
+      if (cfg.url) serverUrlInput.value = cfg.url;
+      if (cfg.key) accessKeyInput.value = cfg.key;
+      if (cfg.url && cfg.key) {
+        connBadge.textContent = connected ? "Buluta Bağlı" : "Kayıtlı Sunucu";
+        connBadge.className = "badge ok";
+        closeSetupBtn.style.display = "inline-block";
+        if (connected) setupCard.style.display = "none";
+      } else {
+        connBadge.textContent = "Sunucu Ayarlanmadı";
+        connBadge.className = "badge warn";
+        setupCard.style.display = "flex";
+      }
+    }
+
+    function fmtDur(sec) {
+      if (!sec) return "";
+      sec = Math.floor(sec);
+      const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+      const pad = (n) => String(n).padStart(2, "0");
+      return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+    }
+
+    async function apiFetch(path, options = {}) {
+      const cfg = getServerConfig();
+      if (!cfg.url || !cfg.key) {
+        setupCard.style.display = "flex";
+        throw new Error("Önce Bulut Sunucu Adresi ve Erişim Anahtarını kaydedin.");
+      }
+      const headers = Object.assign({}, options.headers || {}, {
+        "X-Access-Key": cfg.key
+      });
+      if (options.body && !headers["Content-Type"]) {
+        headers["Content-Type"] = "application/json";
+      }
+      const resp = await fetch(`${cfg.url}${path}`, Object.assign({}, options, { headers }));
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(data.detail || `Sunucu hatası (${resp.status})`);
+      }
+      return data;
+    }
+
+    saveConnBtn.addEventListener("click", async () => {
+      const url = serverUrlInput.value.trim().replace(/\/+$/, "");
+      const key = accessKeyInput.value.trim();
+      connMsg.style.display = "block";
+      if (!url.startsWith("https://") && !url.startsWith("http://")) {
+        connMsg.className = "msg err";
+        connMsg.textContent = "Geçerli bir https:// sunucu adresi girin.";
         return;
       }
-      localStorage.setItem("vi_server_url", val);
-      window.location.href = val.endsWith("/telefon") ? val : `${val}/telefon`;
+      if (!key) {
+        connMsg.className = "msg err";
+        connMsg.textContent = "Erişim anahtarını girin.";
+        return;
+      }
+      connMsg.className = "msg";
+      connMsg.textContent = "Sunucuya bağlanılıyor...";
+      saveConnBtn.disabled = true;
+      try {
+        const resp = await fetch(`${url}/api/ping`, { headers: { "X-Access-Key": key } });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.ok) {
+          throw new Error(data.detail || "Bağlantı reddedildi. Anahtarı kontrol edin.");
+        }
+        localStorage.setItem("vi_cloud_url", url);
+        localStorage.setItem("vi_cloud_key", key);
+        connMsg.className = "msg ok";
+        connMsg.textContent = `Bağlantı başarılı! (Sunucu v${data.version || ""})`;
+        refreshConnUi(true);
+      } catch (err) {
+        connMsg.className = "msg err";
+        connMsg.textContent = err.message || "Sunucuya bağlanılamadı.";
+      } finally {
+        saveConnBtn.disabled = false;
+      }
     });
+
+    toggleSetupBtn.addEventListener("click", () => {
+      setupCard.style.display = setupCard.style.display === "none" ? "flex" : "none";
+    });
+    closeSetupBtn.addEventListener("click", () => {
+      setupCard.style.display = "none";
+    });
+
+    async function runSearchOrInfo() {
+      const val = qInput.value.trim();
+      if (!val) return;
+      resultsCard.style.display = "none";
+      resultsCard.innerHTML = "";
+      infoCard.style.display = "none";
+      progWrap.style.display = "flex";
+      saveFileBtn.style.display = "none";
+      progStatus.textContent = val.startsWith("http") ? "Video bilgileri alınıyor..." : "YouTube'da aranıyor...";
+      progPct.textContent = "";
+      progFill.style.width = "35%";
+      statusMsg.textContent = "";
+
+      try {
+        if (val.startsWith("http://") || val.startsWith("https://")) {
+          const data = await apiFetch("/api/info", {
+            method: "POST",
+            body: JSON.stringify({ url: val })
+          });
+          progWrap.style.display = "none";
+          infoThumb.src = data.thumbnail || "";
+          infoTitle.textContent = data.title || "Video";
+          infoMeta.textContent = `${data.platform || ""} • ${data.uploader || ""} • ${fmtDur(data.duration)}`;
+          infoCard.style.display = "flex";
+        } else {
+          const data = await apiFetch("/api/search", {
+            method: "POST",
+            body: JSON.stringify({ query: val, limit: 15 })
+          });
+          progWrap.style.display = "none";
+          const items = data.results || [];
+          if (!items.length) {
+            statusMsg.className = "msg err";
+            statusMsg.textContent = "Sonuç bulunamadı.";
+            progWrap.style.display = "flex";
+            return;
+          }
+          resultsCard.style.display = "flex";
+          items.forEach((it) => {
+            const row = document.createElement("div");
+            row.className = "res-item";
+            row.innerHTML = `
+              <img src="${it.thumbnail || ""}" alt="" />
+              <div class="res-info">
+                <div class="res-title"></div>
+                <div class="res-meta"></div>
+              </div>
+              <button type="button" class="btn-primary btn-sm">İndir</button>
+            `;
+            row.querySelector(".res-title").textContent = it.title || "";
+            row.querySelector(".res-meta").textContent = `${it.uploader || ""} ${fmtDur(it.duration)}`.trim();
+            row.querySelector("button").addEventListener("click", (e) => {
+              e.stopPropagation();
+              qInput.value = it.url;
+              startDownload(it.url);
+            });
+            row.addEventListener("click", () => {
+              qInput.value = it.url;
+              resultsCard.style.display = "none";
+            });
+            resultsCard.appendChild(row);
+          });
+        }
+      } catch (err) {
+        progStatus.textContent = "Hata";
+        progFill.style.width = "0%";
+        statusMsg.className = "msg err";
+        statusMsg.textContent = err.message || "İşlem başarısız.";
+      }
+    }
+
+    async function startDownload(overrideUrl) {
+      const val = (overrideUrl || qInput.value).trim();
+      if (!val) return;
+      if (!val.startsWith("http://") && !val.startsWith("https://")) {
+        runSearchOrInfo();
+        return;
+      }
+      if (pollTimer) clearInterval(pollTimer);
+      progWrap.style.display = "flex";
+      saveFileBtn.style.display = "none";
+      progStatus.textContent = "İndirme başlatılıyor...";
+      progPct.textContent = "0%";
+      progFill.style.width = "0%";
+      statusMsg.className = "msg";
+      statusMsg.textContent = "";
+      dlBtn.disabled = true;
+
+      try {
+        const res = await apiFetch("/api/download", {
+          method: "POST",
+          body: JSON.stringify({ url: val, quality: qualitySelect.value })
+        });
+        const jobId = res.job_id;
+        pollTimer = setInterval(async () => {
+          try {
+            const st = await apiFetch(`/api/status/${encodeURIComponent(jobId)}`);
+            const pct = Math.round(st.percent || 0);
+            progFill.style.width = `${pct}%`;
+            progPct.textContent = `${pct}%`;
+
+            if (st.status === "downloading") {
+              const extra = [st.speed, st.eta].filter(Boolean).join(" • ");
+              progStatus.textContent = extra ? `İndiriliyor (${extra})` : "İndiriliyor...";
+            } else if (st.status === "processing") {
+              progStatus.textContent = "Video ve ses birleştiriliyor...";
+            } else if (st.status === "completed") {
+              clearInterval(pollTimer);
+              pollTimer = null;
+              dlBtn.disabled = false;
+              progStatus.textContent = "Hazır!";
+              progFill.style.width = "100%";
+              progPct.textContent = "100%";
+
+              const cfg = getServerConfig();
+              const fileUrl = `${cfg.url}/api/file/${encodeURIComponent(st.filename)}?download=1&token=${encodeURIComponent(cfg.key)}`;
+              saveFileBtn.href = fileUrl;
+              saveFileBtn.style.display = "block";
+              statusMsg.className = "msg ok";
+              statusMsg.textContent = `Tamamlandı: ${st.title || st.filename}. İndirme başlamazsa aşağıdaki butona dokunun.`;
+
+              const a = document.createElement("a");
+              a.href = fileUrl;
+              a.download = st.filename || "video.mp4";
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+            } else if (st.status === "error") {
+              clearInterval(pollTimer);
+              pollTimer = null;
+              dlBtn.disabled = false;
+              progStatus.textContent = "Hata";
+              statusMsg.className = "msg err";
+              statusMsg.textContent = st.error || "İndirme başarısız.";
+            }
+          } catch (pollErr) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+            dlBtn.disabled = false;
+            progStatus.textContent = "Hata";
+            statusMsg.className = "msg err";
+            statusMsg.textContent = pollErr.message || "Durum alınamadı.";
+          }
+        }, 900);
+      } catch (err) {
+        dlBtn.disabled = false;
+        progStatus.textContent = "Hata";
+        statusMsg.className = "msg err";
+        statusMsg.textContent = err.message || "İndirme başlatılamadı.";
+      }
+    }
+
+    searchBtn.addEventListener("click", runSearchOrInfo);
+    dlBtn.addEventListener("click", () => startDownload());
+
+    const initCfg = getServerConfig();
+    refreshConnUi(false);
+    if (initCfg.url && initCfg.key) {
+      setupCard.style.display = "none";
+      apiFetch("/api/ping").then(() => refreshConnUi(true)).catch(() => {});
+    }
   </script>
 </body>
 </html>

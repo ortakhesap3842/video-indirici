@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: video-indirici-server
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: CLOUD_ACCESS_KEY
+        generateValue: true

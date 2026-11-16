@@ -39,6 +39,13 @@ app = FastAPI(title="Video İndirici (YouTube & Instagram)")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 PHONE_TOKEN = secrets.token_urlsafe(24)
+CLOUD_ACCESS_KEY = os.environ.get("CLOUD_ACCESS_KEY", "").strip()
+CLOUD_MODE = bool(CLOUD_ACCESS_KEY)
+CLOUD_ALLOWED_ORIGINS = {
+    "https://ortakhesap3842.github.io",
+    "http://localhost",
+    "http://127.0.0.1",
+}
 FAILED_TOKEN_ATTEMPTS: Dict[str, list] = {}
 FAILED_LOCK = threading.Lock()
 jobs: Dict[str, Dict[str, Any]] = {}
@@ -53,17 +60,46 @@ ALLOWED_DOMAINS = (
 )
 
 
+def _is_allowed_origin(origin: Optional[str], request_host: Optional[str] = None) -> bool:
+    if not origin or origin == "null":
+        return True
+    parsed_orig = urllib.parse.urlparse(origin)
+    if parsed_orig.hostname in ("127.0.0.1", "localhost"):
+        return True
+    if CLOUD_MODE:
+        base_orig = f"{parsed_orig.scheme}://{parsed_orig.netloc}"
+        if base_orig in CLOUD_ALLOWED_ORIGINS:
+            return True
+        if request_host and parsed_orig.netloc == request_host:
+            return True
+    return False
+
+
 @app.middleware("http")
 async def security_middleware(request: Request, call_next: Any) -> Any:
+    origin = request.headers.get("origin")
+    req_host = request.headers.get("host")
+
+    if CLOUD_MODE and request.method == "OPTIONS":
+        if not _is_allowed_origin(origin, req_host):
+            return JSONResponse({"detail": "Geçersiz Origin."}, status_code=403)
+        preflight = JSONResponse({}, status_code=204)
+        if origin:
+            preflight.headers["Access-Control-Allow-Origin"] = origin
+            preflight.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            preflight.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Access-Key"
+            preflight.headers["Access-Control-Max-Age"] = "600"
+        return preflight
+
     # Block CSRF / cross-origin mutations from external websites
     if request.method in ("POST", "PUT", "DELETE", "PATCH"):
-        origin = request.headers.get("origin")
-        if origin and origin != "null":
-            parsed_orig = urllib.parse.urlparse(origin)
-            if parsed_orig.hostname not in ("127.0.0.1", "localhost"):
-                return JSONResponse({"detail": "Geçersiz Origin."}, status_code=403)
+        if not _is_allowed_origin(origin, req_host):
+            return JSONResponse({"detail": "Geçersiz Origin."}, status_code=403)
 
     response = await call_next(request)
+    if CLOUD_MODE and origin and _is_allowed_origin(origin, req_host):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Access-Key"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -74,6 +110,8 @@ async def security_middleware(request: Request, call_next: Any) -> Any:
 
 
 def is_local_client(request: Request) -> bool:
+    if CLOUD_MODE:
+        return False
     host = request.client.host if request.client else ""
     return host in ("127.0.0.1", "::1", "localhost", "testclient")
 
@@ -83,10 +121,7 @@ def require_local(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Bu işlem yalnızca bilgisayar üzerinden yapılabilir.")
 
 
-def require_phone_or_local(request: Request, token: Optional[str] = None) -> None:
-    if is_local_client(request):
-        return
-    client_ip = request.client.host if request.client else "unknown"
+def _check_rate_limit(client_ip: str) -> None:
     now = time.time()
     with FAILED_LOCK:
         attempts = [t for t in FAILED_TOKEN_ATTEMPTS.get(client_ip, []) if now - t < 300]
@@ -94,12 +129,34 @@ def require_phone_or_local(request: Request, token: Optional[str] = None) -> Non
         if len(attempts) >= 10:
             raise HTTPException(status_code=429, detail="Çok fazla hatalı deneme. 5 dakika sonra tekrar deneyin.")
 
-    if token and secrets.compare_digest(token, PHONE_TOKEN):
+
+def _record_failed_attempt(client_ip: str) -> None:
+    with FAILED_LOCK:
+        FAILED_TOKEN_ATTEMPTS.setdefault(client_ip, []).append(time.time())
+
+
+def require_phone_or_local(request: Request, token: Optional[str] = None) -> None:
+    if is_local_client(request):
+        return
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(client_ip)
+
+    header_key = request.headers.get("x-access-key")
+    candidate = token or header_key
+    if CLOUD_MODE and candidate and secrets.compare_digest(candidate, CLOUD_ACCESS_KEY):
+        return
+    if not CLOUD_MODE and candidate and secrets.compare_digest(candidate, PHONE_TOKEN):
         return
 
-    with FAILED_LOCK:
-        FAILED_TOKEN_ATTEMPTS.setdefault(client_ip, []).append(now)
-    raise HTTPException(status_code=403, detail="Yetkisiz erişim. Lütfen QR kodu tekrar okutun.")
+    _record_failed_attempt(client_ip)
+    raise HTTPException(status_code=403, detail="Yetkisiz erişim. Geçerli erişim anahtarı gerekli.")
+
+
+def require_action_access(request: Request, token: Optional[str] = None) -> None:
+    if CLOUD_MODE:
+        require_phone_or_local(request, token)
+    else:
+        require_local(request)
 
 
 class InfoRequest(BaseModel):
@@ -220,7 +277,21 @@ def format_eta(eta_sec: Optional[float]) -> str:
     return f"{s}sn"
 
 
+def _cleanup_old_cloud_files() -> None:
+    if not CLOUD_MODE or not DEFAULT_DOWNLOAD_DIR.exists():
+        return
+    cutoff = time.time() - 7200
+    for entry in DEFAULT_DOWNLOAD_DIR.iterdir():
+        try:
+            if entry.is_file() and entry.stat().st_mtime < cutoff:
+                entry.unlink()
+        except Exception:
+            pass
+
+
 def run_download_job(job_id: str, url: str, quality: str) -> None:
+    _cleanup_old_cloud_files()
+
     def update_job(**kwargs: Any) -> None:
         with jobs_lock:
             if job_id in jobs:
@@ -489,9 +560,20 @@ def apply_update(req: ApplyUpdateRequest, request: Request) -> JSONResponse:
         raise HTTPException(status_code=500, detail=f"Güncelleme uygulanamadı: {exc}")
 
 
+@app.get("/health")
+def health_check() -> JSONResponse:
+    return JSONResponse({"ok": True, "version": APP_VERSION, "cloud_mode": CLOUD_MODE})
+
+
+@app.get("/api/ping")
+def api_ping(request: Request, token: Optional[str] = None) -> JSONResponse:
+    require_action_access(request, token)
+    return JSONResponse({"ok": True, "version": APP_VERSION, "cloud_mode": CLOUD_MODE})
+
+
 @app.post("/api/search")
 def search_youtube(req: SearchRequest, request: Request) -> JSONResponse:
-    require_local(request)
+    require_action_access(request)
     query = req.query.strip()
     if len(query) < 2:
         raise HTTPException(status_code=400, detail="Arama için en az 2 karakter girin.")
@@ -537,7 +619,7 @@ def search_youtube(req: SearchRequest, request: Request) -> JSONResponse:
 
 @app.post("/api/info")
 def get_video_info(req: InfoRequest, request: Request) -> JSONResponse:
-    require_local(request)
+    require_action_access(request)
     url = validate_url(req.url)
     ydl_opts = {
         "quiet": True,
@@ -568,7 +650,7 @@ def get_video_info(req: InfoRequest, request: Request) -> JSONResponse:
 
 @app.post("/api/download")
 def start_download(req: DownloadRequest, request: Request) -> JSONResponse:
-    require_local(request)
+    require_action_access(request)
     url = validate_url(req.url)
     quality = req.quality if req.quality in ("best", "1080", "720", "480", "audio") else "best"
     job_id = str(uuid.uuid4())[:8]
@@ -595,7 +677,9 @@ def start_download(req: DownloadRequest, request: Request) -> JSONResponse:
 
 
 @app.get("/api/status/{job_id}")
-def get_status(job_id: str) -> JSONResponse:
+def get_status(job_id: str, request: Request, token: Optional[str] = None) -> JSONResponse:
+    if CLOUD_MODE:
+        require_phone_or_local(request, token)
     with jobs_lock:
         job = jobs.get(job_id)
         if not job:
