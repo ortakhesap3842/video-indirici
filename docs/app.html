@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Video İndirici" />
   <link rel="manifest" href="./manifest.json" />
-  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <link rel="apple-touch-icon" href="./icon.png" />
   <title>Video İndirici — iOS</title>
   <style>
     :root {
@@ -326,21 +326,31 @@
           items.forEach((it) => {
             const row = document.createElement("div");
             row.className = "res-item";
-            row.innerHTML = `
-              <img src="${it.thumbnail || ""}" alt="" />
-              <div class="res-info">
-                <div class="res-title"></div>
-                <div class="res-meta"></div>
-              </div>
-              <button type="button" class="btn-primary btn-sm">İndir</button>
-            `;
-            row.querySelector(".res-title").textContent = it.title || "";
-            row.querySelector(".res-meta").textContent = `${it.uploader || ""} ${fmtDur(it.duration)}`.trim();
-            row.querySelector("button").addEventListener("click", (e) => {
+            const img = document.createElement("img");
+            img.alt = "";
+            img.src = it.thumbnail || "";
+            const info = document.createElement("div");
+            info.className = "res-info";
+            const titleEl = document.createElement("div");
+            titleEl.className = "res-title";
+            titleEl.textContent = it.title || "";
+            const metaEl = document.createElement("div");
+            metaEl.className = "res-meta";
+            metaEl.textContent = `${it.uploader || ""} ${fmtDur(it.duration)}`.trim();
+            info.appendChild(titleEl);
+            info.appendChild(metaEl);
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "btn-primary btn-sm";
+            btn.textContent = "İndir";
+            btn.addEventListener("click", (e) => {
               e.stopPropagation();
               qInput.value = it.url;
               startDownload(it.url);
             });
+            row.appendChild(img);
+            row.appendChild(info);
+            row.appendChild(btn);
             row.addEventListener("click", () => {
               qInput.value = it.url;
               resultsCard.style.display = "none";

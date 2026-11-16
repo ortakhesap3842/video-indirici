@@ -689,6 +689,8 @@ def apply_update(req: ApplyUpdateRequest, request: Request) -> JSONResponse:
 
         threading.Thread(target=exit_soon, daemon=True).start()
         return JSONResponse({"ok": True, "message": "Güncelleme indirildi, uygulama yeniden başlatılıyor..."})
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Güncelleme uygulanamadı: {exc}")
 
@@ -805,6 +807,10 @@ def start_download(req: DownloadRequest, request: Request) -> JSONResponse:
     job_id = str(uuid.uuid4())[:8]
 
     with jobs_lock:
+        if len(jobs) > 200:
+            done_ids = [jid for jid, j in jobs.items() if j.get("status") in ("completed", "error")]
+            for jid in done_ids[: len(done_ids) // 2 + 1]:
+                jobs.pop(jid, None)
         jobs[job_id] = {
             "job_id": job_id,
             "url": url,

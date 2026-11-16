@@ -228,6 +228,7 @@ public class MainActivity extends Activity {
                 try {
                     evalJs("window.onUpdateStatus && window.onUpdateStatus('downloading', 'Güncelleme indiriliyor...')");
                     String currentUrl = url;
+                    boolean connected = false;
                     for (int hop = 0; hop < 5; hop++) {
                         if (!currentUrl.startsWith("https://")) {
                             throw new Exception("Güvenli olmayan yönlendirme engellendi.");
@@ -243,6 +244,7 @@ public class MainActivity extends Activity {
                                 || code == 307 || code == 308) {
                             String nextUrl = conn.getHeaderField("Location");
                             conn.disconnect();
+                            conn = null;
                             if (nextUrl == null || nextUrl.isEmpty()) {
                                 throw new Exception("Geçersiz yönlendirme.");
                             }
@@ -252,9 +254,10 @@ public class MainActivity extends Activity {
                         if (code != HttpURLConnection.HTTP_OK) {
                             throw new Exception("İndirme hatası (HTTP " + code + ")");
                         }
+                        connected = true;
                         break;
                     }
-                    if (conn == null || conn.getResponseCode() != HttpURLConnection.HTTP_OK) {
+                    if (!connected || conn == null) {
                         throw new Exception("Güncelleme sunucusuna ulaşılamadı.");
                     }
 
@@ -331,20 +334,38 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void search(String query, int limit) {
             executor.execute(() -> {
-                Python py = Python.getInstance();
-                PyObject mod = py.getModule("downloader");
-                String json = mod.callAttr("search_youtube", query, limit).toString();
-                evalJs("window.onSearchResults(" + JSONObject.quote(json) + ")");
+                try {
+                    Python py = Python.getInstance();
+                    PyObject mod = py.getModule("downloader");
+                    String json = mod.callAttr("search_youtube", query, limit).toString();
+                    evalJs("window.onSearchResults(" + JSONObject.quote(json) + ")");
+                } catch (Exception e) {
+                    try {
+                        JSONObject err = new JSONObject();
+                        err.put("ok", false);
+                        err.put("error", e.getMessage() != null ? e.getMessage() : "Arama hatası.");
+                        evalJs("window.onSearchResults(" + JSONObject.quote(err.toString()) + ")");
+                    } catch (Exception ignored) {}
+                }
             });
         }
 
         @JavascriptInterface
         public void getInfo(String url) {
             executor.execute(() -> {
-                Python py = Python.getInstance();
-                PyObject mod = py.getModule("downloader");
-                String json = mod.callAttr("get_info", url).toString();
-                evalJs("window.onVideoInfo(" + JSONObject.quote(json) + ")");
+                try {
+                    Python py = Python.getInstance();
+                    PyObject mod = py.getModule("downloader");
+                    String json = mod.callAttr("get_info", url).toString();
+                    evalJs("window.onVideoInfo(" + JSONObject.quote(json) + ")");
+                } catch (Exception e) {
+                    try {
+                        JSONObject err = new JSONObject();
+                        err.put("ok", false);
+                        err.put("error", e.getMessage() != null ? e.getMessage() : "Bilgi alınamadı.");
+                        evalJs("window.onVideoInfo(" + JSONObject.quote(err.toString()) + ")");
+                    } catch (Exception ignored) {}
+                }
             });
         }
 
