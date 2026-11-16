@@ -103,21 +103,29 @@
     const playerCard = document.getElementById("playerCard");
     const playerTitle = document.getElementById("playerTitle");
     const mediaSlot = document.getElementById("mediaSlot");
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get("token") || "";
+    const tokenQ = token ? `token=${encodeURIComponent(token)}` : "";
 
     function playFile(name) {
-      const url = `/api/file/${encodeURIComponent(name)}`;
+      const url = `/api/file/${encodeURIComponent(name)}${tokenQ ? "?" + tokenQ : ""}`;
       const isAudio = name.toLowerCase().endsWith(".mp3") || name.toLowerCase().endsWith(".m4a");
       playerTitle.textContent = name;
-      mediaSlot.innerHTML = isAudio
-        ? `<audio controls autoplay src="${url}"></audio>`
-        : `<video controls playsinline autoplay src="${url}"></video>`;
+      mediaSlot.innerHTML = "";
+      const mediaEl = document.createElement(isAudio ? "audio" : "video");
+      mediaEl.controls = true;
+      mediaEl.autoplay = true;
+      if (!isAudio) mediaEl.playsInline = true;
+      mediaEl.src = url;
+      mediaSlot.appendChild(mediaEl);
       playerCard.classList.add("visible");
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
     async function loadFiles() {
       try {
-        const res = await fetch("/api/downloads");
+        const res = await fetch(`/api/downloads${tokenQ ? "?" + tokenQ : ""}`);
+        if (!res.ok) throw new Error("Yetkisiz");
         const data = await res.json();
         listEl.innerHTML = "";
         if (!data.files || data.files.length === 0) {
@@ -130,7 +138,14 @@
 
           const head = document.createElement("div");
           head.className = "item-head";
-          head.innerHTML = `<span class="item-name">${f.name}</span><span class="item-size">${f.size_mb} MB</span>`;
+          const nameSpan = document.createElement("span");
+          nameSpan.className = "item-name";
+          nameSpan.textContent = f.name;
+          const sizeSpan = document.createElement("span");
+          sizeSpan.className = "item-size";
+          sizeSpan.textContent = `${f.size_mb} MB`;
+          head.appendChild(nameSpan);
+          head.appendChild(sizeSpan);
 
           const actions = document.createElement("div");
           actions.className = "actions";
@@ -143,7 +158,7 @@
 
           const dlLink = document.createElement("a");
           dlLink.className = "btn sec";
-          dlLink.href = `/api/file/${encodeURIComponent(f.name)}?download=1`;
+          dlLink.href = `/api/file/${encodeURIComponent(f.name)}?download=1${tokenQ ? "&" + tokenQ : ""}`;
           dlLink.textContent = "Telefona Kaydet";
 
           actions.appendChild(playBtn);

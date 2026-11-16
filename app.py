@@ -2,6 +2,7 @@ import io
 import json
 import os
 import re
+import secrets
 import shutil
 import socket
 import subprocess
@@ -22,7 +23,7 @@ import qrcode
 import qrcode.image.svg
 import yt_dlp
 
-from version import APP_VERSION, UPDATE_MANIFEST_URL
+from version import APP_VERSION, GITHUB_REPO, UPDATE_MANIFEST_URL
 
 if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
     BASE_DIR = Path(sys._MEIPASS)
@@ -36,8 +37,36 @@ DEFAULT_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app = FastAPI(title="Video İndirici (YouTube & Instagram)")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+PHONE_TOKEN = secrets.token_urlsafe(16)
 jobs: Dict[str, Dict[str, Any]] = {}
 jobs_lock = threading.Lock()
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next: Any) -> Any:
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+def is_local_client(request: Request) -> bool:
+    host = request.client.host if request.client else ""
+    return host in ("127.0.0.1", "::1", "localhost", "testclient")
+
+
+def require_local(request: Request) -> None:
+    if not is_local_client(request):
+        raise HTTPException(status_code=403, detail="Bu işlem yalnızca bilgisayar üzerinden yapılabilir.")
+
+
+def require_phone_or_local(request: Request, token: Optional[str] = None) -> None:
+    if is_local_client(request):
+        return
+    if token and secrets.compare_digest(token, PHONE_TOKEN):
+        return
+    raise HTTPException(status_code=403, detail="Yetkisiz erişim. Lütfen QR kodu tekrar okutun.")
 
 
 class InfoRequest(BaseModel):
@@ -227,7 +256,8 @@ def read_root() -> FileResponse:
 
 
 @app.get("/telefon")
-def read_phone_page() -> FileResponse:
+def read_phone_page(request: Request, token: Optional[str] = None) -> FileResponse:
+    require_phone_or_local(request, token)
     return FileResponse(str(STATIC_DIR / "phone.html"))
 
 
@@ -242,9 +272,10 @@ def get_local_ip() -> str:
 
 @app.get("/api/phone-link")
 def get_phone_link(request: Request) -> JSONResponse:
+    require_local(request)
     ip = get_local_ip()
     port = os.environ.get("VIDEO_INDIRICI_PORT") or str(request.url.port or 8765)
-    url = f"http://{ip}:{port}/telefon"
+    url = f"http://{ip}:{port}/telefon?token={urllib.parse.quote(PHONE_TOKEN)}"
 
     img = qrcode.make(url, image_factory=qrcode.image.svg.SvgPathImage, box_size=8, border=2)
     buf = io.BytesIO()
@@ -255,7 +286,8 @@ def get_phone_link(request: Request) -> JSONResponse:
 
 
 @app.get("/api/file/{filename}")
-def serve_downloaded_file(filename: str, download: int = 0) -> FileResponse:
+def serve_downloaded_file(filename: str, request: Request, download: int = 0, token: Optional[str] = None) -> FileResponse:
+    require_phone_or_local(request, token)
     safe_name = Path(filename).name
     target = (DEFAULT_DOWNLOAD_DIR / safe_name).resolve()
     if not target.is_file() or target.parent != DEFAULT_DOWNLOAD_DIR.resolve():
@@ -269,7 +301,8 @@ def serve_downloaded_file(filename: str, download: int = 0) -> FileResponse:
 
 
 @app.post("/api/open-file/{filename}")
-def open_downloaded_file(filename: str) -> JSONResponse:
+def open_downloaded_file(filename: str, request: Request) -> JSONResponse:
+    require_local(request)
     safe_name = Path(filename).name
     target = (DEFAULT_DOWNLOAD_DIR / safe_name).resolve()
     if not target.is_file() or target.parent != DEFAULT_DOWNLOAD_DIR.resolve():
@@ -282,7 +315,8 @@ def open_downloaded_file(filename: str) -> JSONResponse:
 
 
 @app.delete("/api/file/{filename}")
-def delete_downloaded_file(filename: str) -> JSONResponse:
+def delete_downloaded_file(filename: str, request: Request) -> JSONResponse:
+    require_local(request)
     safe_name = Path(filename).name
     target = (DEFAULT_DOWNLOAD_DIR / safe_name).resolve()
     if not target.is_file() or target.parent != DEFAULT_DOWNLOAD_DIR.resolve():
@@ -343,14 +377,16 @@ def check_update() -> JSONResponse:
 
 
 @app.post("/api/apply-update")
-def apply_update(req: ApplyUpdateRequest) -> JSONResponse:
+def apply_update(req: ApplyUpdateRequest, request: Request) -> JSONResponse:
+    require_local(request)
     if not getattr(sys, "frozen", False):
         raise HTTPException(
             status_code=400,
             detail="Otomatik güncelleme yalnızca paketlenmiş .exe uygulamasında çalışır.",
         )
-    if not req.download_url.startswith("https://"):
-        raise HTTPException(status_code=400, detail="Geçersiz güncelleme bağlantısı.")
+    allowed_prefix = f"https://github.com/{GITHUB_REPO}/"
+    if not req.download_url.startswith(allowed_prefix):
+        raise HTTPException(status_code=400, detail="Yalnızca resmi GitHub deposundan güncelleme yapılabilir.")
 
     current_exe = Path(sys.executable).resolve()
     temp_dir = Path(tempfile.gettempdir())
@@ -407,7 +443,8 @@ def apply_update(req: ApplyUpdateRequest) -> JSONResponse:
 
 
 @app.post("/api/search")
-def search_youtube(req: SearchRequest) -> JSONResponse:
+def search_youtube(req: SearchRequest, request: Request) -> JSONResponse:
+    require_local(request)
     query = req.query.strip()
     if len(query) < 2:
         raise HTTPException(status_code=400, detail="Arama için en az 2 karakter girin.")
@@ -452,7 +489,8 @@ def search_youtube(req: SearchRequest) -> JSONResponse:
 
 
 @app.post("/api/info")
-def get_video_info(req: InfoRequest) -> JSONResponse:
+def get_video_info(req: InfoRequest, request: Request) -> JSONResponse:
+    require_local(request)
     url = validate_url(req.url)
     ydl_opts = {
         "quiet": True,
@@ -482,7 +520,8 @@ def get_video_info(req: InfoRequest) -> JSONResponse:
 
 
 @app.post("/api/download")
-def start_download(req: DownloadRequest) -> JSONResponse:
+def start_download(req: DownloadRequest, request: Request) -> JSONResponse:
+    require_local(request)
     url = validate_url(req.url)
     quality = req.quality if req.quality in ("best", "1080", "720", "480", "audio") else "best"
     job_id = str(uuid.uuid4())[:8]
@@ -518,7 +557,8 @@ def get_status(job_id: str) -> JSONResponse:
 
 
 @app.get("/api/downloads")
-def list_downloads() -> JSONResponse:
+def list_downloads(request: Request, token: Optional[str] = None) -> JSONResponse:
+    require_phone_or_local(request, token)
     files = []
     if DEFAULT_DOWNLOAD_DIR.exists():
         for entry in sorted(DEFAULT_DOWNLOAD_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
@@ -529,7 +569,8 @@ def list_downloads() -> JSONResponse:
 
 
 @app.post("/api/open-folder")
-def open_folder() -> JSONResponse:
+def open_folder(request: Request) -> JSONResponse:
+    require_local(request)
     DEFAULT_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
     if os.name == "nt":
         os.startfile(str(DEFAULT_DOWNLOAD_DIR))

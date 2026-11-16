@@ -1,5 +1,5 @@
 {
-  "version": "1.3.4",
+  "version": "1.3.5",
   "download_url": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
   "downloads": {
     "windows": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
@@ -7,5 +7,5 @@
     "android": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.apk",
     "ios": "./app.html"
   },
-  "notes": "v1.3.4: Android YouTube format hatası (player_client) düzeltildi ve önizleme eski sade haline getirildi."
+  "notes": "v1.3.5: Güvenlik sıkılaştırması (yerel Wi-Fi token koruması, localhost kilidi, XSS koruması ve Android HTTPS zorunluluğu)."
 }
