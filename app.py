@@ -48,6 +48,29 @@ CLOUD_ALLOWED_ORIGINS = {
 }
 FAILED_TOKEN_ATTEMPTS: Dict[str, list] = {}
 FAILED_LOCK = threading.Lock()
+WAF_LOCK = threading.Lock()
+WAF_RATE: Dict[str, list] = {}
+WAF_HEAVY_RATE: Dict[str, list] = {}
+WAF_STRIKES: Dict[str, list] = {}
+WAF_BANS: Dict[str, float] = {}
+WAF_EVENTS: list = []
+WAF_BLOCKED_TOTAL = 0
+WAF_MAX_BODY_BYTES = 65536
+WAF_BAN_SECONDS = 900
+
+WAF_SCANNER_AGENTS = (
+    "sqlmap", "nikto", "nmap", "masscan", "zgrab", "gobuster",
+    "dirbuster", "acunetix", "nessus", "nuclei", "wpscan", "wfuzz",
+)
+
+WAF_SIGNATURES = (
+    re.compile(r"(?:\.\./|\.\.\\|%2e%2e|%252e%252e)", re.IGNORECASE),
+    re.compile(r"(?:/etc/passwd|/etc/shadow|win\.ini|boot\.ini|/\.git/|/\.env\b)", re.IGNORECASE),
+    re.compile(r"(?:<\s*script\b|javascript:|onerror\s*=|onload\s*=)", re.IGNORECASE),
+    re.compile(r"(?:\bunion\b\s+\bselect\b|\bdrop\b\s+\btable\b|\bor\b\s+1\s*=\s*1\b)", re.IGNORECASE),
+    re.compile(r"(?:\$\{jndi:|cmd\.exe|powershell\s+-|;\s*rm\s+-rf\b|`[^`]{1,80}`)", re.IGNORECASE),
+)
+
 jobs: Dict[str, Dict[str, Any]] = {}
 jobs_lock = threading.Lock()
 
@@ -58,6 +81,57 @@ ALLOWED_DOMAINS = (
     "instagram.com",
     "instagr.am",
 )
+
+
+def _get_client_ip(request: Request) -> str:
+    if CLOUD_MODE:
+        xff = request.headers.get("x-forwarded-for", "").strip()
+        if xff:
+            return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _mask_ip(ip: str) -> str:
+    if ":" in ip:
+        return ip[:8] + "***"
+    parts = ip.split(".")
+    if len(parts) == 4:
+        return f"{parts[0]}.{parts[1]}.*.*"
+    return ip
+
+
+def _record_waf_event(ip: str, reason: str, path: str, strike: bool = True) -> None:
+    global WAF_BLOCKED_TOTAL
+    now = time.time()
+    with WAF_LOCK:
+        WAF_BLOCKED_TOTAL += 1
+        WAF_EVENTS.append({
+            "time": time.strftime("%H:%M:%S"),
+            "ip": _mask_ip(ip),
+            "reason": reason,
+            "path": path[:80],
+        })
+        if len(WAF_EVENTS) > 50:
+            del WAF_EVENTS[:-50]
+        if strike and ip not in ("127.0.0.1", "::1", "localhost"):
+            strikes = [t for t in WAF_STRIKES.get(ip, []) if now - t < 600]
+            strikes.append(now)
+            WAF_STRIKES[ip] = strikes
+            if len(strikes) >= 5:
+                WAF_BANS[ip] = now + WAF_BAN_SECONDS
+
+
+def _waf_check_text(text: str) -> Optional[str]:
+    if not text:
+        return None
+    if "\x00" in text:
+        return "Null-byte saldırı imzası"
+    decoded = urllib.parse.unquote_plus(text)
+    for target in (text, decoded):
+        for pat in WAF_SIGNATURES:
+            if pat.search(target):
+                return "Zararlı yük / enjeksiyon imzası"
+    return None
 
 
 def _is_allowed_origin(origin: Optional[str], request_host: Optional[str] = None) -> bool:
@@ -79,9 +153,55 @@ def _is_allowed_origin(origin: Optional[str], request_host: Optional[str] = None
 async def security_middleware(request: Request, call_next: Any) -> Any:
     origin = request.headers.get("origin")
     req_host = request.headers.get("host")
+    client_ip = _get_client_ip(request)
+    path = request.url.path
+    now = time.time()
+
+    # 1. Active IP ban check
+    with WAF_LOCK:
+        ban_until = WAF_BANS.get(client_ip, 0.0)
+        if ban_until > now:
+            return JSONResponse(
+                {"detail": "IP adresiniz güvenlik duvarı tarafından geçici olarak engellendi."},
+                status_code=403,
+            )
+        elif client_ip in WAF_BANS:
+            WAF_BANS.pop(client_ip, None)
+
+    # 2. Scanner / exploit bot User-Agent block
+    ua = (request.headers.get("user-agent") or "").lower()
+    if any(bot in ua for bot in WAF_SCANNER_AGENTS):
+        _record_waf_event(client_ip, "Otomatik tarayıcı/bot engellendi", path, strike=True)
+        return JSONResponse({"detail": "Erişim güvenlik duvarı tarafından reddedildi."}, status_code=403)
+
+    # 3. Rate limiting (General: 180/min, Heavy API: 25/min)
+    if path != "/health":
+        with WAF_LOCK:
+            reqs = [t for t in WAF_RATE.get(client_ip, []) if now - t < 60]
+            reqs.append(now)
+            WAF_RATE[client_ip] = reqs
+            if len(reqs) > 180:
+                _record_waf_event(client_ip, "Genel hız sınırı aşıldı (DDoS/Flood)", path, strike=True)
+                return JSONResponse({"detail": "Çok fazla istek. Güvenlik duvarı hız sınırı."}, status_code=429)
+
+            if path in ("/api/download", "/api/search", "/api/info") and request.method == "POST":
+                hreqs = [t for t in WAF_HEAVY_RATE.get(client_ip, []) if now - t < 60]
+                hreqs.append(now)
+                WAF_HEAVY_RATE[client_ip] = hreqs
+                if len(hreqs) > 25:
+                    _record_waf_event(client_ip, "API işlem hız sınırı aşıldı", path, strike=False)
+                    return JSONResponse({"detail": "Dakikalık işlem sınırı aşıldı."}, status_code=429)
+
+    # 4. Path & query WAF signature inspection
+    raw_target = path + ("?" + request.url.query if request.url.query else "")
+    sig_hit = _waf_check_text(raw_target)
+    if sig_hit:
+        _record_waf_event(client_ip, sig_hit, path, strike=True)
+        return JSONResponse({"detail": "Zararlı istek güvenlik duvarı tarafından engellendi."}, status_code=403)
 
     if CLOUD_MODE and request.method == "OPTIONS":
         if not _is_allowed_origin(origin, req_host):
+            _record_waf_event(client_ip, "Yetkisiz CORS Origin", path, strike=False)
             return JSONResponse({"detail": "Geçersiz Origin."}, status_code=403)
         preflight = JSONResponse({}, status_code=204)
         if origin:
@@ -91,10 +211,19 @@ async def security_middleware(request: Request, call_next: Any) -> Any:
             preflight.headers["Access-Control-Max-Age"] = "600"
         return preflight
 
-    # Block CSRF / cross-origin mutations from external websites
+    # 5. CSRF / cross-origin mutation check & payload inspection
     if request.method in ("POST", "PUT", "DELETE", "PATCH"):
         if not _is_allowed_origin(origin, req_host):
+            _record_waf_event(client_ip, "CSRF / Harici Origin engellendi", path, strike=True)
             return JSONResponse({"detail": "Geçersiz Origin."}, status_code=403)
+        body_bytes = await request.body()
+        if len(body_bytes) > WAF_MAX_BODY_BYTES:
+            _record_waf_event(client_ip, "Aşırı büyük istek gövdesi (413)", path, strike=True)
+            return JSONResponse({"detail": "İstek boyutu güvenlik duvarı sınırını aşıyor."}, status_code=413)
+        body_sig = _waf_check_text(body_bytes.decode("utf-8", errors="ignore"))
+        if body_sig:
+            _record_waf_event(client_ip, body_sig, path, strike=True)
+            return JSONResponse({"detail": "Zararlı veri güvenlik duvarı tarafından engellendi."}, status_code=403)
 
     response = await call_next(request)
     if CLOUD_MODE and origin and _is_allowed_origin(origin, req_host):
@@ -104,7 +233,11 @@ async def security_middleware(request: Request, call_next: Any) -> Any:
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-XSS-Protection"] = "1; mode=block"
-    if request.url.path.startswith("/api/"):
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["X-WAF-Protected"] = "VideoIndirici-Firewall/1.0"
+    if CLOUD_MODE:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    if path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -569,6 +702,22 @@ def health_check() -> JSONResponse:
 def api_ping(request: Request, token: Optional[str] = None) -> JSONResponse:
     require_action_access(request, token)
     return JSONResponse({"ok": True, "version": APP_VERSION, "cloud_mode": CLOUD_MODE})
+
+
+@app.get("/api/security-status")
+def security_status(request: Request, token: Optional[str] = None) -> JSONResponse:
+    require_action_access(request, token)
+    now = time.time()
+    with WAF_LOCK:
+        active_bans = sum(1 for until in WAF_BANS.values() if until > now)
+        recent = list(WAF_EVENTS[-15:])
+        blocked_total = WAF_BLOCKED_TOTAL
+    return JSONResponse({
+        "firewall": "active",
+        "blocked_total": blocked_total,
+        "active_bans": active_bans,
+        "recent_events": recent,
+    })
 
 
 @app.post("/api/search")
