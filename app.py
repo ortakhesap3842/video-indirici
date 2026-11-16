@@ -466,28 +466,13 @@ def get_video_info(req: InfoRequest) -> JSONResponse:
         if not info:
             raise HTTPException(status_code=400, detail="Video bilgileri alınamadı.")
 
-        platform = detect_platform(url)
-        vid_id = info.get("id") or ""
-        fmts = info.get("formats") or []
-        prog = [
-            f for f in fmts
-            if f.get("vcodec") not in (None, "none")
-            and f.get("acodec") not in (None, "none")
-            and f.get("url")
-        ]
-        preview_url = prog[-1]["url"] if prog else ""
-        embed_url = f"https://www.youtube.com/embed/{vid_id}?rel=0" if (platform == "YouTube" and vid_id) else ""
-
         return JSONResponse(
             {
-                "id": vid_id,
                 "title": info.get("title") or "Başlıksız Video",
                 "uploader": info.get("uploader") or info.get("channel") or "Bilinmiyor",
                 "duration": info.get("duration") or 0,
                 "thumbnail": info.get("thumbnail") or "",
-                "platform": platform,
-                "preview_url": preview_url,
-                "embed_url": embed_url,
+                "platform": detect_platform(url),
             }
         )
     except HTTPException:

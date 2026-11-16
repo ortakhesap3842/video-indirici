@@ -244,38 +244,10 @@
       margin-top: 18px;
       padding-top: 18px;
       border-top: 1px solid var(--border);
-      flex-direction: column;
-      gap: 12px;
-    }
-    .preview.visible { display: flex; }
-
-    .preview-top {
-      display: flex;
       gap: 14px;
       align-items: center;
     }
-
-    .preview-player {
-      width: 100%;
-      border-radius: 12px;
-      overflow: hidden;
-      background: #000;
-      border: 1px solid var(--border);
-    }
-
-    .preview-player iframe {
-      width: 100%;
-      height: 280px;
-      border: none;
-      display: block;
-    }
-
-    .preview-player video {
-      width: 100%;
-      max-height: 300px;
-      display: block;
-      background: #000;
-    }
+    .preview.visible { display: flex; }
 
     .preview img {
       width: 148px;
@@ -548,14 +520,13 @@
       </div>
 
       <div id="previewBox" class="preview">
-        <div class="preview-top">
+        <div style="display:flex; gap:14px; align-items:center;">
           <img id="thumbImg" src="" alt="Önizleme" />
           <div class="preview-meta">
             <h3 id="videoTitle"></h3>
             <p id="videoSub"></p>
           </div>
         </div>
-        <div id="previewPlayer" class="preview-player" style="display:none;"></div>
       </div>
 
       <div id="searchResults" class="search-results"></div>
@@ -605,7 +576,6 @@
     const downloadBtn = document.getElementById("downloadBtn");
     const qualitySelect = document.getElementById("qualitySelect");
     const previewBox = document.getElementById("previewBox");
-    const previewPlayer = document.getElementById("previewPlayer");
     const searchResults = document.getElementById("searchResults");
     const thumbImg = document.getElementById("thumbImg");
     const videoTitle = document.getElementById("videoTitle");
@@ -692,8 +662,6 @@
     clearBtn.addEventListener("click", () => {
       urlInput.value = "";
       previewBox.classList.remove("visible");
-      previewPlayer.innerHTML = "";
-      previewPlayer.style.display = "none";
       searchResults.classList.remove("visible");
       searchResults.innerHTML = "";
       urlInput.focus();
@@ -784,8 +752,6 @@
       searchBtn.disabled = true;
       searchBtn.textContent = "Aranıyor...";
       previewBox.classList.remove("visible");
-      previewPlayer.innerHTML = "";
-      previewPlayer.style.display = "none";
       if (limit <= 25) searchResults.innerHTML = "";
       try {
         const res = await fetch("/api/search", {
@@ -881,8 +847,6 @@
       searchResults.classList.remove("visible");
       infoBtn.disabled = true;
       infoBtn.textContent = "Yükleniyor...";
-      previewPlayer.innerHTML = "";
-      previewPlayer.style.display = "none";
       try {
         const res = await fetch("/api/info", {
           method: "POST",
@@ -896,23 +860,6 @@
         videoTitle.textContent = data.title;
         const dur = formatDuration(data.duration);
         videoSub.textContent = `${data.platform} • ${data.uploader}${dur ? " • " + dur : ""}`;
-
-        if (data.preview_url) {
-          const vid = document.createElement("video");
-          vid.controls = true;
-          vid.playsInline = true;
-          vid.src = data.preview_url;
-          previewPlayer.appendChild(vid);
-          previewPlayer.style.display = "block";
-        } else if (data.embed_url) {
-          const ifr = document.createElement("iframe");
-          ifr.src = data.embed_url;
-          ifr.allow = "autoplay; encrypted-media; picture-in-picture";
-          ifr.allowFullscreen = true;
-          previewPlayer.appendChild(ifr);
-          previewPlayer.style.display = "block";
-        }
-
         previewBox.classList.add("visible");
       } catch (err) {
         showToast(err.message, "error");

@@ -62,6 +62,7 @@ def get_info(url):
             "no_warnings": True,
             "noplaylist": True,
             "skip_download": True,
+            "extractor_args": {"youtube": {"player_client": ["android", "ios"]}},
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -99,9 +100,9 @@ def download_video(url, quality, output_dir, progress_cb=None):
             fmt = "bestaudio[ext=m4a]/bestaudio/best"
         elif quality in ("720", "480"):
             h = int(quality)
-            fmt = f"best[height<={h}][ext=mp4]/best[ext=mp4]/best"
+            fmt = f"best[height<={h}][ext=mp4][acodec!=none]/best[ext=mp4][acodec!=none]/best[acodec!=none]/best"
         else:
-            fmt = "best[ext=mp4]/best"
+            fmt = "best[ext=mp4][acodec!=none]/best[acodec!=none]/best"
 
         opts = {
             "outtmpl": os.path.join(output_dir, "%(title).100s [%(id)s].%(ext)s"),
@@ -110,6 +111,7 @@ def download_video(url, quality, output_dir, progress_cb=None):
             "no_warnings": True,
             "restrictfilenames": False,
             "format": fmt,
+            "extractor_args": {"youtube": {"player_client": ["android", "ios"]}},
             "progress_hooks": [hook],
         }
 
