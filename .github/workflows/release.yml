@@ -62,9 +62,22 @@ jobs:
           gradle-version: "8.9"
       - name: Build Android APK
         working-directory: android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          gradle assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk VideoIndirici.apk
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > keystore.jks
+            export ANDROID_KEYSTORE_PATH="$(pwd)/keystore.jks"
+            gradle assembleRelease
+            cp app/build/outputs/apk/release/app-release.apk VideoIndirici.apk
+            rm -f keystore.jks
+          else
+            gradle assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk VideoIndirici.apk
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: android-apk
@@ -72,6 +85,7 @@ jobs:
 
   publish-release:
     needs: [build-windows, build-macos, build-android]
+    if: always() && needs.build-windows.result == 'success' && needs.build-android.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -79,6 +93,7 @@ jobs:
           path: artifacts
       - uses: softprops/action-gh-release@v2
         with:
+          fail_on_unmatched_files: false
           files: |
             artifacts/windows-exe/VideoIndirici.exe
             artifacts/macos-zip/VideoIndirici-macOS.zip
