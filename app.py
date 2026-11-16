@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import urllib.parse
 import urllib.request
 import uuid
@@ -37,17 +38,38 @@ DEFAULT_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app = FastAPI(title="Video İndirici (YouTube & Instagram)")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-PHONE_TOKEN = secrets.token_urlsafe(16)
+PHONE_TOKEN = secrets.token_urlsafe(24)
+FAILED_TOKEN_ATTEMPTS: Dict[str, list] = {}
+FAILED_LOCK = threading.Lock()
 jobs: Dict[str, Dict[str, Any]] = {}
 jobs_lock = threading.Lock()
 
+ALLOWED_DOMAINS = (
+    "youtube.com",
+    "youtu.be",
+    "youtube-nocookie.com",
+    "instagram.com",
+    "instagr.am",
+)
+
 
 @app.middleware("http")
-async def add_security_headers(request: Request, call_next: Any) -> Any:
+async def security_middleware(request: Request, call_next: Any) -> Any:
+    # Block CSRF / cross-origin mutations from external websites
+    if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+        origin = request.headers.get("origin")
+        if origin and origin != "null":
+            parsed_orig = urllib.parse.urlparse(origin)
+            if parsed_orig.hostname not in ("127.0.0.1", "localhost"):
+                return JSONResponse({"detail": "Geçersiz Origin."}, status_code=403)
+
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 
@@ -64,8 +86,19 @@ def require_local(request: Request) -> None:
 def require_phone_or_local(request: Request, token: Optional[str] = None) -> None:
     if is_local_client(request):
         return
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    with FAILED_LOCK:
+        attempts = [t for t in FAILED_TOKEN_ATTEMPTS.get(client_ip, []) if now - t < 300]
+        FAILED_TOKEN_ATTEMPTS[client_ip] = attempts
+        if len(attempts) >= 10:
+            raise HTTPException(status_code=429, detail="Çok fazla hatalı deneme. 5 dakika sonra tekrar deneyin.")
+
     if token and secrets.compare_digest(token, PHONE_TOKEN):
         return
+
+    with FAILED_LOCK:
+        FAILED_TOKEN_ATTEMPTS.setdefault(client_ip, []).append(now)
     raise HTTPException(status_code=403, detail="Yetkisiz erişim. Lütfen QR kodu tekrar okutun.")
 
 
@@ -104,19 +137,27 @@ def parse_version(v: str) -> tuple:
     return tuple(int(p) for p in parts) if parts else (0,)
 
 
+def _host_matches(host: str, domain: str) -> bool:
+    return host == domain or host.endswith("." + domain)
+
+
 def detect_platform(url: str) -> str:
-    lower = url.lower()
-    if any(domain in lower for domain in ("youtube.com", "youtu.be", "youtube-nocookie.com")):
+    parsed = urllib.parse.urlparse(url.strip())
+    host = (parsed.hostname or "").lower()
+    if any(_host_matches(host, d) for d in ("youtube.com", "youtu.be", "youtube-nocookie.com")):
         return "YouTube"
-    if any(domain in lower for domain in ("instagram.com", "instagr.am")):
+    if any(_host_matches(host, d) for d in ("instagram.com", "instagr.am")):
         return "Instagram"
     return "Diğer"
 
 
 def validate_url(url: str) -> str:
     cleaned = url.strip()
-    if not re.match(r"^https?://", cleaned, re.IGNORECASE):
+    parsed = urllib.parse.urlparse(cleaned)
+    if parsed.scheme.lower() not in ("http", "https") or not parsed.hostname:
         raise HTTPException(status_code=400, detail="Geçerli bir http:// veya https:// bağlantısı girin.")
+    if parsed.username or parsed.password:
+        raise HTTPException(status_code=400, detail="Bağlantıda kullanıcı bilgisi bulunamaz.")
     platform = detect_platform(cleaned)
     if platform == "Diğer":
         raise HTTPException(
@@ -384,9 +425,9 @@ def apply_update(req: ApplyUpdateRequest, request: Request) -> JSONResponse:
             status_code=400,
             detail="Otomatik güncelleme yalnızca paketlenmiş .exe uygulamasında çalışır.",
         )
-    allowed_prefix = f"https://github.com/{GITHUB_REPO}/"
+    allowed_prefix = f"https://github.com/{GITHUB_REPO}/releases/"
     if not req.download_url.startswith(allowed_prefix):
-        raise HTTPException(status_code=400, detail="Yalnızca resmi GitHub deposundan güncelleme yapılabilir.")
+        raise HTTPException(status_code=400, detail="Yalnızca resmi GitHub Releases üzerinden güncelleme yapılabilir.")
 
     current_exe = Path(sys.executable).resolve()
     temp_dir = Path(tempfile.gettempdir())
@@ -400,6 +441,12 @@ def apply_update(req: ApplyUpdateRequest, request: Request) -> JSONResponse:
         )
         with urllib.request.urlopen(url_req, timeout=60) as resp, open(new_exe, "wb") as out:
             shutil.copyfileobj(resp, out)
+
+        with open(new_exe, "rb") as chk:
+            header = chk.read(2)
+        if header != b"MZ" or new_exe.stat().st_size < 10_000_000:
+            new_exe.unlink(missing_ok=True)
+            raise HTTPException(status_code=400, detail="İndirilen güncelleme dosyası geçerli bir Windows uygulaması değil.")
 
         pid = os.getpid()
         bat_content = (

@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from urllib.parse import urlparse
 import yt_dlp
 
 
@@ -8,13 +9,28 @@ def _strip_ansi(text):
     return re.sub(r"\x1b\[[0-9;]*m", "", text or "").strip()
 
 
+def _host_matches(host, domain):
+    return host == domain or host.endswith("." + domain)
+
+
 def _detect_platform(url):
-    lower = url.lower()
-    if any(d in lower for d in ("youtube.com", "youtu.be", "youtube-nocookie.com")):
+    parsed = urlparse((url or "").strip())
+    host = (parsed.hostname or "").lower()
+    if any(_host_matches(host, d) for d in ("youtube.com", "youtu.be", "youtube-nocookie.com")):
         return "YouTube"
-    if any(d in lower for d in ("instagram.com", "instagr.am")):
+    if any(_host_matches(host, d) for d in ("instagram.com", "instagr.am")):
         return "Instagram"
     return "Diğer"
+
+
+def _validate_url(url):
+    cleaned = (url or "").strip()
+    parsed = urlparse(cleaned)
+    if parsed.scheme.lower() not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password:
+        return None
+    if _detect_platform(cleaned) == "Diğer":
+        return None
+    return cleaned
 
 
 def search_youtube(query, limit=20):
@@ -57,6 +73,9 @@ def search_youtube(query, limit=20):
 
 def get_info(url):
     try:
+        clean_url = _validate_url(url)
+        if not clean_url:
+            return json.dumps({"ok": False, "error": "Yalnızca geçerli YouTube ve Instagram bağlantıları desteklenir."}, ensure_ascii=False)
         opts = {
             "quiet": True,
             "no_warnings": True,
@@ -65,7 +84,7 @@ def get_info(url):
             "extractor_args": {"youtube": {"player_client": ["android", "ios"]}},
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+            info = ydl.extract_info(clean_url, download=False)
         if not info:
             return json.dumps({"ok": False, "error": "Video bilgileri alınamadı."}, ensure_ascii=False)
         return json.dumps({
@@ -82,6 +101,9 @@ def get_info(url):
 
 def download_video(url, quality, output_dir, progress_cb=None):
     try:
+        clean_url = _validate_url(url)
+        if not clean_url:
+            return json.dumps({"ok": False, "error": "Yalnızca geçerli YouTube ve Instagram bağlantıları desteklenir."}, ensure_ascii=False)
         os.makedirs(output_dir, exist_ok=True)
 
         def hook(d):
@@ -116,7 +138,7 @@ def download_video(url, quality, output_dir, progress_cb=None):
         }
 
         with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+            info = ydl.extract_info(clean_url, download=True)
             filepath = None
             req_dl = info.get("requested_downloads") or []
             if req_dl:

@@ -54,6 +54,11 @@ public class MainActivity extends Activity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setAllowFileAccessFromFileURLs(false);
+        settings.setAllowUniversalAccessFromFileURLs(false);
+        settings.setGeolocationEnabled(false);
 
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient());
@@ -133,6 +138,9 @@ public class MainActivity extends Activity {
     public class AndroidBridge {
         @JavascriptInterface
         public void openExternal(String url) {
+            if (url == null || !url.startsWith("https://github.com/ortakhesap3842/video-indirici/")) {
+                return;
+            }
             runOnUiThread(() -> {
                 try {
                     Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
