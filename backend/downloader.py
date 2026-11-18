@@ -88,9 +88,7 @@ def expand_subtitle_langs(lang_code: str) -> List[str]:
     if not code or not re.match(r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$", code):
         return []
     if code == "zh":
-        return ["zh-Hans", "zh-Hant", "zh"]
-    if code == "en":
-        return ["en", "en-US", "en-GB"]
+        return ["zh-Hans"]
     return [code]
 
 
@@ -131,16 +129,6 @@ def run_download_job(
 
     sub_langs = expand_subtitle_langs(subtitle_lang)
     dub_code = dub_lang.strip().lower() if dub_lang and dub_lang.strip().lower() in NEURAL_VOICES else ""
-    if (sub_langs or dub_code) and quality != "audio":
-        ydl_opts["writesubtitles"] = True
-        ydl_opts["writeautomaticsub"] = True
-        combined_langs = list(dict.fromkeys(sub_langs + ([dub_code, "en", "tr"] if dub_code else [])))
-        ydl_opts["subtitleslangs"] = combined_langs
-        ydl_opts["subtitlesformat"] = "srt/vtt/best"
-        if sub_langs and ffmpeg_loc and not dub_code:
-            pps = list(ydl_opts.get("postprocessors") or [])
-            pps.append({"key": "FFmpegEmbedSubtitle"})
-            ydl_opts["postprocessors"] = pps
 
     try:
         update_job(status="downloading", percent=0.0)
@@ -167,14 +155,33 @@ def run_download_job(
             elif Path(filepath).with_suffix(".mp4").exists():
                 filepath = str(Path(filepath).with_suffix(".mp4"))
 
-        if dub_code and filepath and ffmpeg_loc:
+        if (sub_langs or dub_code) and quality != "audio" and filepath:
+            want_langs = sub_langs if sub_langs else [dub_code]
+            sub_opts: Dict[str, Any] = {
+                "outtmpl": str(DEFAULT_DOWNLOAD_DIR / "%(title).120B [%(id)s].%(ext)s"),
+                "noplaylist": True,
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "writesubtitles": True,
+                "writeautomaticsub": True,
+                "subtitleslangs": want_langs[:1],
+                "subtitlesformat": "srt/vtt/best",
+                "sleep_interval_subtitles": 2,
+            }
+            try:
+                with yt_dlp.YoutubeDL(sub_opts) as sydl:
+                    sydl.extract_info(url, download=True)
+            except Exception:
+                pass
+
             stem = str(Path(filepath).with_suffix(""))
             sub_candidate: Optional[Path] = None
             for p in Path(filepath).parent.iterdir():
                 if str(p).startswith(stem) and p.suffix.lower() in (".srt", ".vtt"):
                     sub_candidate = p
                     break
-            if sub_candidate is not None:
+            if dub_code and sub_candidate is not None and ffmpeg_loc:
                 update_job(status="dubbing", percent=100.0, speed="", eta="")
                 dubbed = apply_ai_dubbing(Path(filepath), sub_candidate, dub_code, ffmpeg_loc)
                 if dubbed is not None:

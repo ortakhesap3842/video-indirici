@@ -1,5 +1,5 @@
 {
-  "version": "1.4.1",
+  "version": "1.4.2",
   "download_url": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
   "downloads": {
     "windows": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
@@ -7,5 +7,5 @@
     "android": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.apk",
     "ios": "./app.html"
   },
-  "notes": "v1.4.1: Android ve iOS mobil arayüzde kalite, CC, dublaj ve indirme butonları 2 satırlı düzenli ızgaraya alındı."
+  "notes": "v1.4.2: YouTube altyazı HTTP 429 hatası düzeltildi, Android dublaj çevirisi ve konuşmacı ses tonuna göre nöral dublaj eşleştirme eklendi."
 }

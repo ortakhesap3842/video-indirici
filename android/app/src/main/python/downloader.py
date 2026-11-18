@@ -146,10 +146,45 @@ def _expand_sub_langs(lang_code):
     if not code or not re.match(r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$", code):
         return []
     if code == "zh":
-        return ["zh-Hans", "zh-Hant", "zh"]
-    if code == "en":
-        return ["en", "en-US", "en-GB"]
+        return ["zh-Hans"]
     return [code]
+
+
+def _translate_srt_file(src_path, target_lang):
+    try:
+        import urllib.parse
+        text = open(src_path, "r", encoding="utf-8", errors="ignore").read()
+        blocks = re.split(r"\r?\n\r?\n+", text)
+        tl = "zh-CN" if target_lang == "zh" else target_lang
+        out_blocks = []
+        idx = 1
+        for blk in blocks:
+            lines = [ln.strip() for ln in blk.splitlines() if ln.strip()]
+            ts_idx = next((i for i, ln in enumerate(lines) if "-->" in ln), -1)
+            if ts_idx == -1:
+                continue
+            body = re.sub(r"<[^>]+>", "", " ".join(lines[ts_idx + 1 :])).strip()
+            if not body:
+                continue
+            try:
+                q = urllib.parse.quote(body)
+                u = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={tl}&dt=t&q={q}"
+                req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=6) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                tr = "".join(seg[0] for seg in (data[0] or []) if seg and seg[0]).strip() or body
+            except Exception:
+                tr = body
+            out_blocks.append(f"{idx}\n{lines[ts_idx]}\n{tr}")
+            idx += 1
+        if not out_blocks:
+            return None
+        dub_path = os.path.splitext(src_path)[0] + f".dub-{target_lang}.srt"
+        with open(dub_path, "w", encoding="utf-8") as f:
+            f.write("\n\n".join(out_blocks) + "\n")
+        return dub_path
+    except Exception:
+        return None
 
 
 def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="", dub_lang=""):
@@ -191,11 +226,6 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
         }
         sub_langs = _expand_sub_langs(subtitle_lang)
         dub_langs = _expand_sub_langs(dub_lang)
-        if (sub_langs or dub_langs) and quality != "audio":
-            opts["writesubtitles"] = True
-            opts["writeautomaticsub"] = True
-            opts["subtitleslangs"] = list(dict.fromkeys(sub_langs + dub_langs))
-            opts["subtitlesformat"] = "srt/vtt/best"
 
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
@@ -221,11 +251,40 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
 
         subtitle_path = ""
         subtitle_name = ""
-        if (sub_langs or dub_langs) and filepath:
+        sub_note = ""
+        if (sub_langs or dub_langs) and quality != "audio" and filepath:
+            want_langs = sub_langs if sub_langs else dub_langs
+            sub_opts = {
+                "outtmpl": os.path.join(output_dir, "%(title).100s [%(id)s].%(ext)s"),
+                "noplaylist": True,
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "writesubtitles": True,
+                "writeautomaticsub": True,
+                "subtitleslangs": want_langs[:1],
+                "subtitlesformat": "srt/vtt/best",
+                "sleep_interval_subtitles": 2,
+                "extractor_args": {"youtube": {"player_client": ["android", "ios"]}},
+            }
+            try:
+                if progress_cb is not None:
+                    progress_cb.onProgress(100.0, "Altyazı / çeviri hazırlanıyor...")
+                with yt_dlp.YoutubeDL(sub_opts) as sydl:
+                    sydl.extract_info(clean_url, download=True)
+            except Exception:
+                sub_note = " (Altyazı YouTube hız sınırına takıldı, video kaydedildi)"
+
             stem = os.path.splitext(filepath)[0]
             for fn in os.listdir(output_dir):
                 full = os.path.join(output_dir, fn)
                 if full.startswith(stem) and os.path.splitext(fn)[1].lower() in (".srt", ".vtt"):
+                    if dub_langs:
+                        translated = _translate_srt_file(full, dub_langs[0])
+                        if translated:
+                            subtitle_path = translated
+                            subtitle_name = os.path.basename(translated)
+                            break
                     subtitle_path = full
                     subtitle_name = fn
                     break
@@ -236,7 +295,7 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
             "filename": os.path.basename(filepath),
             "subtitle_path": subtitle_path,
             "subtitle_name": subtitle_name,
-            "title": info.get("title") or "Video",
+            "title": (info.get("title") or "Video") + sub_note,
         }, ensure_ascii=False)
     except Exception as exc:
         return json.dumps({"ok": False, "error": _strip_ansi(str(exc))}, ensure_ascii=False)
