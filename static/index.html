@@ -522,6 +522,10 @@
           <label for="ccSelect">CC Altyazı:</label>
           <select id="ccSelect"></select>
         </div>
+        <div class="quality-select">
+          <label for="dubSelect">AI Dublaj:</label>
+          <select id="dubSelect"></select>
+        </div>
         <button id="downloadBtn" type="button">İndir</button>
       </div>
 
@@ -583,6 +587,8 @@
     const qualitySelect = document.getElementById("qualitySelect");
     const ccSelect = document.getElementById("ccSelect");
     VideoIndiriciUI.populateLanguageSelect(ccSelect, "Altyazı Yok");
+    const dubSelect = document.getElementById("dubSelect");
+    VideoIndiriciUI.populateLanguageSelect(dubSelect, "Dublaj Yok");
     const previewBox = document.getElementById("previewBox");
     const searchResults = document.getElementById("searchResults");
     const thumbImg = document.getElementById("thumbImg");
@@ -873,7 +879,7 @@
         const res = await fetch("/api/download", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url, quality: qualitySelect.value, subtitle_lang: ccSelect.value }),
+          body: JSON.stringify({ url, quality: qualitySelect.value, subtitle_lang: ccSelect.value, dub_lang: dubSelect.value }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "İndirme başlatılamadı.");
@@ -903,6 +909,8 @@
           progressLabel.textContent = extra ? `İndiriliyor (${extra})` : "İndiriliyor...";
         } else if (data.status === "processing") {
           progressLabel.textContent = "Video/Ses birleştiriliyor (FFmpeg)...";
+        } else if (data.status === "dubbing") {
+          progressLabel.textContent = "Yapay zeka dublajı ve ses senkronizasyonu hazırlanıyor...";
         } else if (data.status === "completed") {
           clearInterval(pollTimer);
           downloadBtn.disabled = false;

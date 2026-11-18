@@ -10,6 +10,7 @@ from fastapi import HTTPException
 import yt_dlp
 
 from backend.config import DEFAULT_DOWNLOAD_DIR
+from backend.dubbing import NEURAL_VOICES, apply_ai_dubbing
 from backend.security import detect_platform
 
 jobs: Dict[str, Dict[str, Any]] = {}
@@ -92,7 +93,9 @@ def expand_subtitle_langs(lang_code: str) -> List[str]:
     return [code]
 
 
-def run_download_job(job_id: str, url: str, quality: str, subtitle_lang: str = "") -> None:
+def run_download_job(
+    job_id: str, url: str, quality: str, subtitle_lang: str = "", dub_lang: str = ""
+) -> None:
     def update_job(**kwargs: Any) -> None:
         with jobs_lock:
             if job_id in jobs:
@@ -126,12 +129,14 @@ def run_download_job(job_id: str, url: str, quality: str, subtitle_lang: str = "
         ydl_opts["ffmpeg_location"] = ffmpeg_loc
 
     sub_langs = expand_subtitle_langs(subtitle_lang)
-    if sub_langs and quality != "audio":
+    dub_code = dub_lang.strip().lower() if dub_lang and dub_lang.strip().lower() in NEURAL_VOICES else ""
+    if (sub_langs or dub_code) and quality != "audio":
         ydl_opts["writesubtitles"] = True
         ydl_opts["writeautomaticsub"] = True
-        ydl_opts["subtitleslangs"] = sub_langs
+        combined_langs = list(dict.fromkeys(sub_langs + ([dub_code, "en", "tr"] if dub_code else [])))
+        ydl_opts["subtitleslangs"] = combined_langs
         ydl_opts["subtitlesformat"] = "srt/vtt/best"
-        if ffmpeg_loc:
+        if sub_langs and ffmpeg_loc and not dub_code:
             pps = list(ydl_opts.get("postprocessors") or [])
             pps.append({"key": "FFmpegEmbedSubtitle"})
             ydl_opts["postprocessors"] = pps
@@ -151,6 +156,19 @@ def run_download_job(job_id: str, url: str, quality: str, subtitle_lang: str = "
                     filepath = str(Path(filepath).with_suffix(".mp3"))
                 elif Path(filepath).with_suffix(".mp4").exists():
                     filepath = str(Path(filepath).with_suffix(".mp4"))
+
+            if dub_code and filepath and ffmpeg_loc:
+                stem = str(Path(filepath).with_suffix(""))
+                sub_candidate: Optional[Path] = None
+                for p in Path(filepath).parent.iterdir():
+                    if str(p).startswith(stem) and p.suffix.lower() in (".srt", ".vtt"):
+                        sub_candidate = p
+                        break
+                if sub_candidate is not None:
+                    update_job(status="dubbing", percent=100.0, speed="", eta="")
+                    dubbed = apply_ai_dubbing(Path(filepath), sub_candidate, dub_code, ffmpeg_loc)
+                    if dubbed is not None:
+                        filepath = str(dubbed)
 
             filename = Path(filepath).name if filepath else title
             update_job(
@@ -231,9 +249,10 @@ def extract_video_info(url: str) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"Video bilgileri alınamadı: {strip_ansi(str(exc))}")
 
 
-def create_download_job(url: str, quality: str, subtitle_lang: str = "") -> str:
+def create_download_job(url: str, quality: str, subtitle_lang: str = "", dub_lang: str = "") -> str:
     clean_quality = quality if quality in ("best", "1080", "720", "480", "audio") else "best"
     clean_sub = subtitle_lang.strip().lower() if expand_subtitle_langs(subtitle_lang) else ""
+    clean_dub = dub_lang.strip().lower() if dub_lang and dub_lang.strip().lower() in NEURAL_VOICES else ""
     job_id = str(uuid.uuid4())[:8]
 
     with jobs_lock:
@@ -247,6 +266,7 @@ def create_download_job(url: str, quality: str, subtitle_lang: str = "") -> str:
             "platform": detect_platform(url),
             "quality": clean_quality,
             "subtitle_lang": clean_sub,
+            "dub_lang": clean_dub,
             "status": "queued",
             "percent": 0.0,
             "speed": "",
@@ -258,7 +278,7 @@ def create_download_job(url: str, quality: str, subtitle_lang: str = "") -> str:
         }
 
     thread = threading.Thread(
-        target=run_download_job, args=(job_id, url, clean_quality, clean_sub), daemon=True
+        target=run_download_job, args=(job_id, url, clean_quality, clean_sub, clean_dub), daemon=True
     )
     thread.start()
     return job_id

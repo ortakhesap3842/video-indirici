@@ -110,7 +110,7 @@ def _expand_sub_langs(lang_code):
     return [code]
 
 
-def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang=""):
+def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="", dub_lang=""):
     try:
         clean_url = _validate_url(url)
         if not clean_url:
@@ -148,10 +148,11 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="")
             "progress_hooks": [hook],
         }
         sub_langs = _expand_sub_langs(subtitle_lang)
-        if sub_langs and quality != "audio":
+        dub_langs = _expand_sub_langs(dub_lang)
+        if (sub_langs or dub_langs) and quality != "audio":
             opts["writesubtitles"] = True
             opts["writeautomaticsub"] = True
-            opts["subtitleslangs"] = sub_langs
+            opts["subtitleslangs"] = list(dict.fromkeys(sub_langs + dub_langs))
             opts["subtitlesformat"] = "srt/vtt/best"
 
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -165,7 +166,7 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="")
 
         subtitle_path = ""
         subtitle_name = ""
-        if sub_langs and filepath:
+        if (sub_langs or dub_langs) and filepath:
             stem = os.path.splitext(filepath)[0]
             for fn in os.listdir(output_dir):
                 full = os.path.join(output_dir, fn)

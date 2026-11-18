@@ -376,6 +376,11 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void downloadWithSubtitle(String url, String quality, String subtitleLang) {
+            downloadWithOptions(url, quality, subtitleLang, "");
+        }
+
+        @JavascriptInterface
+        public void downloadWithOptions(String url, String quality, String subtitleLang, String dubLang) {
             executor.execute(() -> {
                 try {
                     File tempDir = new File(getCacheDir(), "dl_temp");
@@ -386,7 +391,8 @@ public class MainActivity extends Activity {
 
                     String json = mod.callAttr(
                             "download_video", url, quality, tempDir.getAbsolutePath(), cb,
-                            subtitleLang != null ? subtitleLang : ""
+                            subtitleLang != null ? subtitleLang : "",
+                            dubLang != null ? dubLang : ""
                     ).toString();
                     JSONObject obj = new JSONObject(json);
                     if (obj.optBoolean("ok", false)) {

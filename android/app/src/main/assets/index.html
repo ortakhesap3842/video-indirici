@@ -120,6 +120,7 @@
           <option value="audio">Sadece Ses (M4A)</option>
         </select>
         <select id="ccSelect"></select>
+        <select id="dubSelect"></select>
         <button id="searchBtn" class="sec" type="button">Ara / Önizle</button>
         <button id="dlBtn" type="button">İndir</button>
       </div>
@@ -150,6 +151,8 @@
     const qualitySelect = document.getElementById("qualitySelect");
     const ccSelect = document.getElementById("ccSelect");
     VideoIndiriciUI.populateLanguageSelect(ccSelect, "CC: Yok");
+    const dubSelect = document.getElementById("dubSelect");
+    VideoIndiriciUI.populateLanguageSelect(dubSelect, "Dublaj: Yok");
     const searchBtn = document.getElementById("searchBtn");
     const dlBtn = document.getElementById("dlBtn");
     const previewBox = document.getElementById("previewBox");
@@ -197,7 +200,9 @@
       progLabel.textContent = "İndirme başlatılıyor...";
       statusMsg.className = "msg";
       statusMsg.textContent = "";
-      if (AndroidApp.downloadWithSubtitle) {
+      if (AndroidApp.downloadWithOptions) {
+        AndroidApp.downloadWithOptions(val, qualitySelect.value, ccSelect.value || "", dubSelect.value || "");
+      } else if (AndroidApp.downloadWithSubtitle) {
         AndroidApp.downloadWithSubtitle(val, qualitySelect.value, ccSelect.value || "");
       } else {
         AndroidApp.download(val, qualitySelect.value);

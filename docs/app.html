@@ -104,6 +104,7 @@
           <option value="audio">Sadece Ses (M4A)</option>
         </select>
         <select id="ccSelect"></select>
+        <select id="dubSelect"></select>
         <button id="searchBtn" type="button" class="btn-secondary">Ara</button>
         <button id="dlBtn" type="button" class="btn-primary">İndir</button>
       </div>
@@ -151,6 +152,8 @@
     const qualitySelect = document.getElementById("qualitySelect");
     const ccSelect = document.getElementById("ccSelect");
     VideoIndiriciUI.populateLanguageSelect(ccSelect, "CC: Yok");
+    const dubSelect = document.getElementById("dubSelect");
+    VideoIndiriciUI.populateLanguageSelect(dubSelect, "Dublaj: Yok");
     const searchBtn = document.getElementById("searchBtn");
     const dlBtn = document.getElementById("dlBtn");
     const infoCard = document.getElementById("infoCard");
