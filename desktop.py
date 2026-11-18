@@ -37,6 +37,7 @@ def start_server(port: int) -> None:
         port=port,
         log_config=None,
         access_log=False,
+        limit_concurrency=100,
     )
 
 
