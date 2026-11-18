@@ -371,6 +371,11 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void download(String url, String quality) {
+            downloadWithSubtitle(url, quality, "");
+        }
+
+        @JavascriptInterface
+        public void downloadWithSubtitle(String url, String quality, String subtitleLang) {
             executor.execute(() -> {
                 try {
                     File tempDir = new File(getCacheDir(), "dl_temp");
@@ -379,12 +384,23 @@ public class MainActivity extends Activity {
                     ProgressCallback cb = (percent, text) ->
                             evalJs("window.onDownloadProgress(" + percent + ", " + JSONObject.quote(text) + ")");
 
-                    String json = mod.callAttr("download_video", url, quality, tempDir.getAbsolutePath(), cb).toString();
+                    String json = mod.callAttr(
+                            "download_video", url, quality, tempDir.getAbsolutePath(), cb,
+                            subtitleLang != null ? subtitleLang : ""
+                    ).toString();
                     JSONObject obj = new JSONObject(json);
                     if (obj.optBoolean("ok", false)) {
                         String srcPath = obj.getString("filepath");
                         String fileName = obj.getString("filename");
                         String savedPath = saveToPublicDownloads(new File(srcPath), fileName);
+                        String subPath = obj.optString("subtitle_path", "");
+                        String subName = obj.optString("subtitle_name", "");
+                        if (!subPath.isEmpty() && !subName.isEmpty()) {
+                            File subFile = new File(subPath);
+                            if (subFile.exists()) {
+                                saveToPublicDownloads(subFile, subName);
+                            }
+                        }
                         obj.put("saved_path", savedPath);
                     }
                     evalJs("window.onDownloadDone(" + JSONObject.quote(obj.toString()) + ")");

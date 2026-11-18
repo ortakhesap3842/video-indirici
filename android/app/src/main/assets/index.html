@@ -119,6 +119,7 @@
           <option value="480">480p MP4</option>
           <option value="audio">Sadece Ses (M4A)</option>
         </select>
+        <select id="ccSelect"></select>
         <button id="searchBtn" class="sec" type="button">Ara / Önizle</button>
         <button id="dlBtn" type="button">İndir</button>
       </div>
@@ -147,6 +148,8 @@
   <script>
     const qInput = document.getElementById("qInput");
     const qualitySelect = document.getElementById("qualitySelect");
+    const ccSelect = document.getElementById("ccSelect");
+    VideoIndiriciUI.populateLanguageSelect(ccSelect, "CC: Yok");
     const searchBtn = document.getElementById("searchBtn");
     const dlBtn = document.getElementById("dlBtn");
     const previewBox = document.getElementById("previewBox");
@@ -194,7 +197,11 @@
       progLabel.textContent = "İndirme başlatılıyor...";
       statusMsg.className = "msg";
       statusMsg.textContent = "";
-      AndroidApp.download(val, qualitySelect.value);
+      if (AndroidApp.downloadWithSubtitle) {
+        AndroidApp.downloadWithSubtitle(val, qualitySelect.value, ccSelect.value || "");
+      } else {
+        AndroidApp.download(val, qualitySelect.value);
+      }
     }
 
     window.onSearchResults = function(jsonStr) {

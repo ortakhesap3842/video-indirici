@@ -518,6 +518,10 @@
             <option value="audio">Sadece Ses (MP3 • 192kbps)</option>
           </select>
         </div>
+        <div class="quality-select">
+          <label for="ccSelect">CC Altyazı:</label>
+          <select id="ccSelect"></select>
+        </div>
         <button id="downloadBtn" type="button">İndir</button>
       </div>
 
@@ -577,6 +581,8 @@
     const infoBtn = document.getElementById("infoBtn");
     const downloadBtn = document.getElementById("downloadBtn");
     const qualitySelect = document.getElementById("qualitySelect");
+    const ccSelect = document.getElementById("ccSelect");
+    VideoIndiriciUI.populateLanguageSelect(ccSelect, "Altyazı Yok");
     const previewBox = document.getElementById("previewBox");
     const searchResults = document.getElementById("searchResults");
     const thumbImg = document.getElementById("thumbImg");
@@ -867,7 +873,7 @@
         const res = await fetch("/api/download", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url, quality: qualitySelect.value }),
+          body: JSON.stringify({ url, quality: qualitySelect.value, subtitle_lang: ccSelect.value }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "İndirme başlatılamadı.");

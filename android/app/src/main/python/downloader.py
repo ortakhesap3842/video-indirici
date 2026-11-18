@@ -99,7 +99,18 @@ def get_info(url):
         return json.dumps({"ok": False, "error": _strip_ansi(str(exc))}, ensure_ascii=False)
 
 
-def download_video(url, quality, output_dir, progress_cb=None):
+def _expand_sub_langs(lang_code):
+    code = (lang_code or "").strip().lower()
+    if not code or not re.match(r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$", code):
+        return []
+    if code == "zh":
+        return ["zh-Hans", "zh-Hant", "zh"]
+    if code == "en":
+        return ["en", "en-US", "en-GB"]
+    return [code]
+
+
+def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang=""):
     try:
         clean_url = _validate_url(url)
         if not clean_url:
@@ -136,6 +147,12 @@ def download_video(url, quality, output_dir, progress_cb=None):
             "extractor_args": {"youtube": {"player_client": ["android", "ios"]}},
             "progress_hooks": [hook],
         }
+        sub_langs = _expand_sub_langs(subtitle_lang)
+        if sub_langs and quality != "audio":
+            opts["writesubtitles"] = True
+            opts["writeautomaticsub"] = True
+            opts["subtitleslangs"] = sub_langs
+            opts["subtitlesformat"] = "srt/vtt/best"
 
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(clean_url, download=True)
@@ -146,10 +163,23 @@ def download_video(url, quality, output_dir, progress_cb=None):
             if not filepath:
                 filepath = ydl.prepare_filename(info)
 
+        subtitle_path = ""
+        subtitle_name = ""
+        if sub_langs and filepath:
+            stem = os.path.splitext(filepath)[0]
+            for fn in os.listdir(output_dir):
+                full = os.path.join(output_dir, fn)
+                if full.startswith(stem) and os.path.splitext(fn)[1].lower() in (".srt", ".vtt"):
+                    subtitle_path = full
+                    subtitle_name = fn
+                    break
+
         return json.dumps({
             "ok": True,
             "filepath": filepath,
             "filename": os.path.basename(filepath),
+            "subtitle_path": subtitle_path,
+            "subtitle_name": subtitle_name,
             "title": info.get("title") or "Video",
         }, ensure_ascii=False)
     except Exception as exc:

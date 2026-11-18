@@ -46,6 +46,7 @@ class SearchRequest(BaseModel):
 class DownloadRequest(BaseModel):
     url: str
     quality: str = "best"  # best, 1080, 720, 480, audio
+    subtitle_lang: str = ""
 
 
 class ApplyUpdateRequest(BaseModel):
@@ -161,7 +162,7 @@ def get_video_info(req: InfoRequest, request: Request) -> JSONResponse:
 def start_download(req: DownloadRequest, request: Request) -> JSONResponse:
     require_action_access(request)
     url = validate_url(req.url)
-    job_id = create_download_job(url, req.quality)
+    job_id = create_download_job(url, req.quality, req.subtitle_lang)
     return JSONResponse({"job_id": job_id})
 
 

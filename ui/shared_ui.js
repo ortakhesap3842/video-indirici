@@ -95,9 +95,41 @@
     });
   }
 
+  var WORLD_LANGUAGES = [
+    { code: "tr", label: "Türkçe (TR)" },
+    { code: "en", label: "İngilizce (EN)" },
+    { code: "de", label: "Almanca (DE)" },
+    { code: "ru", label: "Rusça (RU)" },
+    { code: "zh", label: "Çince (ZH)" },
+    { code: "es", label: "İspanyolca (ES)" },
+    { code: "fr", label: "Fransızca (FR)" },
+    { code: "ar", label: "Arapça (AR)" },
+    { code: "ja", label: "Japonca (JA)" },
+    { code: "ko", label: "Korece (KO)" },
+    { code: "it", label: "İtalyanca (IT)" },
+    { code: "pt", label: "Portekizce (PT)" }
+  ];
+
+  function populateLanguageSelect(selectEl, defaultLabel) {
+    if (!selectEl) return;
+    selectEl.innerHTML = "";
+    var emptyOpt = document.createElement("option");
+    emptyOpt.value = "";
+    emptyOpt.textContent = defaultLabel || "Yok";
+    selectEl.appendChild(emptyOpt);
+    WORLD_LANGUAGES.forEach(function (lang) {
+      var opt = document.createElement("option");
+      opt.value = lang.code;
+      opt.textContent = lang.label;
+      selectEl.appendChild(opt);
+    });
+  }
+
   global.VideoIndiriciUI = {
+    WORLD_LANGUAGES: WORLD_LANGUAGES,
     formatDuration: formatDuration,
     isHttpUrl: isHttpUrl,
+    populateLanguageSelect: populateLanguageSelect,
     renderSearchResults: renderSearchResults,
   };
 })(window);

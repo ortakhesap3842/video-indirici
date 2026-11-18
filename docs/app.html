@@ -103,6 +103,7 @@
           <option value="480">480p MP4</option>
           <option value="audio">Sadece Ses (M4A)</option>
         </select>
+        <select id="ccSelect"></select>
         <button id="searchBtn" type="button" class="btn-secondary">Ara</button>
         <button id="dlBtn" type="button" class="btn-primary">İndir</button>
       </div>
@@ -123,6 +124,7 @@
         <div class="prog-bar"><div id="progFill" class="prog-fill"></div></div>
         <div id="statusMsg" class="msg"></div>
         <a id="saveFileBtn" class="btn-link btn-primary" style="display:none;" target="_blank" rel="noopener">Telefona Kaydet / Aç</a>
+        <a id="saveSubBtn" class="btn-link btn-secondary" style="display:none;" target="_blank" rel="noopener">Altyazı (CC) İndir</a>
       </div>
     </div>
 
@@ -147,6 +149,8 @@
 
     const qInput = document.getElementById("qInput");
     const qualitySelect = document.getElementById("qualitySelect");
+    const ccSelect = document.getElementById("ccSelect");
+    VideoIndiriciUI.populateLanguageSelect(ccSelect, "CC: Yok");
     const searchBtn = document.getElementById("searchBtn");
     const dlBtn = document.getElementById("dlBtn");
     const infoCard = document.getElementById("infoCard");
@@ -159,6 +163,7 @@
     const progFill = document.getElementById("progFill");
     const statusMsg = document.getElementById("statusMsg");
     const saveFileBtn = document.getElementById("saveFileBtn");
+    const saveSubBtn = document.getElementById("saveSubBtn");
     const resultsCard = document.getElementById("resultsCard");
 
     function extractYoutubeId(url) {
@@ -275,6 +280,7 @@
 
       progWrap.style.display = "flex";
       saveFileBtn.style.display = "none";
+      saveSubBtn.style.display = "none";
       progStatus.textContent = "Akış hazırlanıyor...";
       progPct.textContent = "40%";
       progFill.style.width = "40%";
@@ -286,6 +292,7 @@
         const vidId = extractYoutubeId(val);
         let targetUrl = val;
         let title = "Video";
+        let subUrl = "";
 
         if (vidId) {
           const data = await fetchFromNodes(`/streams/${encodeURIComponent(vidId)}`);
@@ -301,6 +308,12 @@
             if (!chosen || !chosen.url) throw new Error("Video akışı bulunamadı.");
             targetUrl = chosen.url;
           }
+          const wantSub = (ccSelect.value || "").toLowerCase();
+          if (wantSub && Array.isArray(data.subtitles)) {
+            const match = data.subtitles.find((s) => (s.code || "").toLowerCase() === wantSub)
+              || data.subtitles.find((s) => (s.code || "").toLowerCase().startsWith(wantSub));
+            if (match && match.url) subUrl = match.url;
+          }
         }
 
         progFill.style.width = "100%";
@@ -308,6 +321,10 @@
         progStatus.textContent = "Hazır!";
         saveFileBtn.href = targetUrl;
         saveFileBtn.style.display = "block";
+        if (subUrl) {
+          saveSubBtn.href = subUrl;
+          saveSubBtn.style.display = "block";
+        }
         statusMsg.className = "msg ok";
         statusMsg.textContent = `Hazır: ${title}. Kaydetmek için aşağıdaki butona dokunun.`;
 

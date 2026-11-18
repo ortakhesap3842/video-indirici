@@ -81,7 +81,18 @@ def build_format_selector(quality: str) -> Dict[str, Any]:
     }
 
 
-def run_download_job(job_id: str, url: str, quality: str) -> None:
+def expand_subtitle_langs(lang_code: str) -> List[str]:
+    code = (lang_code or "").strip().lower()
+    if not code or not re.match(r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$", code):
+        return []
+    if code == "zh":
+        return ["zh-Hans", "zh-Hant", "zh"]
+    if code == "en":
+        return ["en", "en-US", "en-GB"]
+    return [code]
+
+
+def run_download_job(job_id: str, url: str, quality: str, subtitle_lang: str = "") -> None:
     def update_job(**kwargs: Any) -> None:
         with jobs_lock:
             if job_id in jobs:
@@ -113,6 +124,17 @@ def run_download_job(job_id: str, url: str, quality: str) -> None:
     ffmpeg_loc = get_ffmpeg_location()
     if ffmpeg_loc:
         ydl_opts["ffmpeg_location"] = ffmpeg_loc
+
+    sub_langs = expand_subtitle_langs(subtitle_lang)
+    if sub_langs and quality != "audio":
+        ydl_opts["writesubtitles"] = True
+        ydl_opts["writeautomaticsub"] = True
+        ydl_opts["subtitleslangs"] = sub_langs
+        ydl_opts["subtitlesformat"] = "srt/vtt/best"
+        if ffmpeg_loc:
+            pps = list(ydl_opts.get("postprocessors") or [])
+            pps.append({"key": "FFmpegEmbedSubtitle"})
+            ydl_opts["postprocessors"] = pps
 
     try:
         update_job(status="downloading", percent=0.0)
@@ -209,8 +231,9 @@ def extract_video_info(url: str) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"Video bilgileri alınamadı: {strip_ansi(str(exc))}")
 
 
-def create_download_job(url: str, quality: str) -> str:
+def create_download_job(url: str, quality: str, subtitle_lang: str = "") -> str:
     clean_quality = quality if quality in ("best", "1080", "720", "480", "audio") else "best"
+    clean_sub = subtitle_lang.strip().lower() if expand_subtitle_langs(subtitle_lang) else ""
     job_id = str(uuid.uuid4())[:8]
 
     with jobs_lock:
@@ -223,6 +246,7 @@ def create_download_job(url: str, quality: str) -> str:
             "url": url,
             "platform": detect_platform(url),
             "quality": clean_quality,
+            "subtitle_lang": clean_sub,
             "status": "queued",
             "percent": 0.0,
             "speed": "",
@@ -233,7 +257,9 @@ def create_download_job(url: str, quality: str) -> str:
             "error": "",
         }
 
-    thread = threading.Thread(target=run_download_job, args=(job_id, url, clean_quality), daemon=True)
+    thread = threading.Thread(
+        target=run_download_job, args=(job_id, url, clean_quality, clean_sub), daemon=True
+    )
     thread.start()
     return job_id
 
