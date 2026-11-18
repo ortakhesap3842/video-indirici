@@ -1,5 +1,5 @@
 {
-  "version": "1.3.9",
+  "version": "1.4.0",
   "download_url": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
   "downloads": {
     "windows": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
@@ -7,5 +7,5 @@
     "android": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.apk",
     "ios": "./app.html"
   },
-  "notes": "v1.3.9: Yapay Zeka Akıllı Dublaj, Çok Dilli CC Altyazı ve Evrensel Video/Film Sitesi İndiricisi."
+  "notes": "v1.4.0: Android uygulama içi güncelleyici 'Files still open' hatası düzeltildi, AI Dublaj, CC Altyazı ve Evrensel İndirici."
 }

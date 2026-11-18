@@ -301,15 +301,16 @@ public class MainActivity extends Activity {
                     PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
                             PackageInstaller.SessionParams.MODE_FULL_INSTALL);
                     int sessionId = packageInstaller.createSession(params);
-                    try (PackageInstaller.Session session = packageInstaller.openSession(sessionId);
-                         InputStream in = new FileInputStream(apkFile);
-                         OutputStream out = session.openWrite("base.apk", 0, apkFile.length())) {
-                        byte[] buf = new byte[16384];
-                        int len;
-                        while ((len = in.read(buf)) > 0) {
-                            out.write(buf, 0, len);
+                    try (PackageInstaller.Session session = packageInstaller.openSession(sessionId)) {
+                        try (InputStream in = new FileInputStream(apkFile);
+                             OutputStream out = session.openWrite("base.apk", 0, apkFile.length())) {
+                            byte[] buf = new byte[16384];
+                            int len;
+                            while ((len = in.read(buf)) > 0) {
+                                out.write(buf, 0, len);
+                            }
+                            session.fsync(out);
                         }
-                        session.fsync(out);
                         Intent statusIntent = new Intent(ACTION_INSTALL_STATUS);
                         statusIntent.setPackage(getPackageName());
                         int flags = PendingIntent.FLAG_UPDATE_CURRENT
