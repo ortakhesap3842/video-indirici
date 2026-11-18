@@ -1,5 +1,5 @@
 APP_NAME = "Video İndirici"
-APP_VERSION = "1.3.8"
+APP_VERSION = "1.3.9"
 
 # Yayınladıktan sonra GitHub kullanıcı adınızla güncelleyin (ör. "recep/video-indirici")
 GITHUB_REPO = "ortakhesap3842/video-indirici"

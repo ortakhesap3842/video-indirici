@@ -12,6 +12,7 @@ import yt_dlp
 from backend.config import DEFAULT_DOWNLOAD_DIR
 from backend.dubbing import NEURAL_VOICES, apply_ai_dubbing
 from backend.security import detect_platform
+from backend.universal import discover_embedded_media_url
 
 jobs: Dict[str, Dict[str, Any]] = {}
 jobs_lock = threading.Lock()
@@ -143,41 +144,50 @@ def run_download_job(
 
     try:
         update_job(status="downloading", percent=0.0)
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            title = info.get("title") or "Video"
-            requested_downloads = info.get("requested_downloads") or []
-            filepath: Optional[str] = None
-            if requested_downloads:
-                filepath = requested_downloads[0].get("filepath")
-            if not filepath:
-                filepath = ydl.prepare_filename(info)
-                if quality == "audio":
-                    filepath = str(Path(filepath).with_suffix(".mp3"))
-                elif Path(filepath).with_suffix(".mp4").exists():
-                    filepath = str(Path(filepath).with_suffix(".mp4"))
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+        except Exception as first_exc:
+            embedded = discover_embedded_media_url(url)
+            if not embedded or embedded == url:
+                raise first_exc
+            fallback_opts = {**ydl_opts, "http_headers": {"Referer": url}}
+            with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                info = ydl.extract_info(embedded, download=True)
+        title = info.get("title") or "Video"
+        requested_downloads = info.get("requested_downloads") or []
+        filepath: Optional[str] = None
+        if requested_downloads:
+            filepath = requested_downloads[0].get("filepath")
+        if not filepath:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl_name:
+                filepath = ydl_name.prepare_filename(info)
+            if quality == "audio":
+                filepath = str(Path(filepath).with_suffix(".mp3"))
+            elif Path(filepath).with_suffix(".mp4").exists():
+                filepath = str(Path(filepath).with_suffix(".mp4"))
 
-            if dub_code and filepath and ffmpeg_loc:
-                stem = str(Path(filepath).with_suffix(""))
-                sub_candidate: Optional[Path] = None
-                for p in Path(filepath).parent.iterdir():
-                    if str(p).startswith(stem) and p.suffix.lower() in (".srt", ".vtt"):
-                        sub_candidate = p
-                        break
-                if sub_candidate is not None:
-                    update_job(status="dubbing", percent=100.0, speed="", eta="")
-                    dubbed = apply_ai_dubbing(Path(filepath), sub_candidate, dub_code, ffmpeg_loc)
-                    if dubbed is not None:
-                        filepath = str(dubbed)
+        if dub_code and filepath and ffmpeg_loc:
+            stem = str(Path(filepath).with_suffix(""))
+            sub_candidate: Optional[Path] = None
+            for p in Path(filepath).parent.iterdir():
+                if str(p).startswith(stem) and p.suffix.lower() in (".srt", ".vtt"):
+                    sub_candidate = p
+                    break
+            if sub_candidate is not None:
+                update_job(status="dubbing", percent=100.0, speed="", eta="")
+                dubbed = apply_ai_dubbing(Path(filepath), sub_candidate, dub_code, ffmpeg_loc)
+                if dubbed is not None:
+                    filepath = str(dubbed)
 
-            filename = Path(filepath).name if filepath else title
-            update_job(
-                status="completed",
-                percent=100.0,
-                title=title,
-                filename=filename,
-                filepath=filepath,
-            )
+        filename = Path(filepath).name if filepath else title
+        update_job(
+            status="completed",
+            percent=100.0,
+            title=title,
+            filename=filename,
+            filepath=filepath,
+        )
     except Exception as exc:
         update_job(status="error", error=strip_ansi(str(exc)))
 
@@ -232,8 +242,15 @@ def extract_video_info(url: str) -> Dict[str, Any]:
         "skip_download": True,
     }
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+        except Exception as first_exc:
+            embedded = discover_embedded_media_url(url)
+            if not embedded or embedded == url:
+                raise first_exc
+            with yt_dlp.YoutubeDL({**ydl_opts, "http_headers": {"Referer": url}}) as ydl:
+                info = ydl.extract_info(embedded, download=False)
         if not info:
             raise HTTPException(status_code=400, detail="Video bilgileri alınamadı.")
         return {

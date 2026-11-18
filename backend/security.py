@@ -238,19 +238,21 @@ def detect_platform(url: str) -> str:
         return "YouTube"
     if any(_host_matches(host, d) for d in ("instagram.com", "instagr.am")):
         return "Instagram"
-    return "Diğer"
+    return host.removeprefix("www.") if host else "Web"
 
 
 def validate_url(url: str) -> str:
+    from backend.universal import is_public_http_url
+
     cleaned = url.strip()
     parsed = urllib.parse.urlparse(cleaned)
     if parsed.scheme.lower() not in ("http", "https") or not parsed.hostname:
         raise HTTPException(status_code=400, detail="Geçerli bir http:// veya https:// bağlantısı girin.")
     if parsed.username or parsed.password:
         raise HTTPException(status_code=400, detail="Bağlantıda kullanıcı bilgisi bulunamaz.")
-    if detect_platform(cleaned) == "Diğer":
+    if not is_public_http_url(cleaned):
         raise HTTPException(
             status_code=400,
-            detail="Şu anda yalnızca YouTube ve Instagram bağlantıları desteklenmektedir.",
+            detail="Güvenlik duvarı: Yerel ağ veya özel IP adreslerine erişim engellendi.",
         )
     return cleaned
