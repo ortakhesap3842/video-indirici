@@ -317,11 +317,14 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
             elif status == "finished":
                 progress_cb.onProgress(100.0, "Dosya hazırlanıyor...")
 
+        audio_only_path = ""
         if quality == "audio":
             fmt = "bestaudio[ext=m4a]/bestaudio/best"
         elif quality in ("720", "480"):
             h = int(quality)
             fmt = f"best[height<={h}][ext=mp4][acodec!=none]/best[ext=mp4][acodec!=none]/best[acodec!=none]/best"
+        elif quality == "1080":
+            fmt = "best[height<=1080][ext=mp4][acodec!=none]/best[ext=mp4][acodec!=none]/best[acodec!=none]/best"
         else:
             fmt = "best[ext=mp4][acodec!=none]/best[acodec!=none]/best"
 
@@ -339,14 +342,39 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
         dub_langs = _expand_sub_langs(dub_lang)
 
         try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(clean_url, download=True)
-                filepath = None
-                req_dl = info.get("requested_downloads") or []
-                if req_dl:
-                    filepath = req_dl[0].get("filepath")
-                if not filepath:
-                    filepath = ydl.prepare_filename(info)
+            if quality in ("best", "1080") and _detect_platform(clean_url) in ("YouTube", "Instagram"):
+                v_fmt = (
+                    "bestvideo[height<=1080][ext=mp4][vcodec^=avc1]/bestvideo[height<=1080][ext=mp4]"
+                    if quality == "1080"
+                    else "bestvideo[ext=mp4][vcodec^=avc1]/bestvideo[ext=mp4]"
+                )
+                try:
+                    v_opts = {**opts, "format": v_fmt, "outtmpl": os.path.join(output_dir, "%(title).100s [%(id)s].vpart.%(ext)s")}
+                    a_opts = {**opts, "format": "bestaudio[ext=m4a]/bestaudio[acodec^=mp4a]", "outtmpl": os.path.join(output_dir, "%(title).100s [%(id)s].apart.%(ext)s")}
+                    with yt_dlp.YoutubeDL(v_opts) as vydl:
+                        info = vydl.extract_info(clean_url, download=True)
+                        v_req = info.get("requested_downloads") or []
+                        v_path = v_req[0].get("filepath") if v_req else vydl.prepare_filename(info)
+                    with yt_dlp.YoutubeDL(a_opts) as aydl:
+                        ainfo = aydl.extract_info(clean_url, download=True)
+                        a_req = ainfo.get("requested_downloads") or []
+                        a_path = a_req[0].get("filepath") if a_req else aydl.prepare_filename(ainfo)
+                    if v_path and a_path and os.path.exists(v_path) and os.path.exists(a_path):
+                        filepath = v_path
+                        audio_only_path = a_path
+                    else:
+                        raise RuntimeError("split streams missing")
+                except Exception:
+                    audio_only_path = ""
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        info = ydl.extract_info(clean_url, download=True)
+                        req_dl = info.get("requested_downloads") or []
+                        filepath = req_dl[0].get("filepath") if req_dl else ydl.prepare_filename(info)
+            else:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(clean_url, download=True)
+                    req_dl = info.get("requested_downloads") or []
+                    filepath = req_dl[0].get("filepath") if req_dl else ydl.prepare_filename(info)
         except Exception as first_exc:
             embedded = _discover_embedded_media_url(clean_url)
             if not embedded or embedded == clean_url:
@@ -425,7 +453,8 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
         return json.dumps({
             "ok": True,
             "filepath": filepath,
-            "filename": os.path.basename(filepath),
+            "filename": os.path.basename(filepath).replace(".vpart.", "."),
+            "audio_only_path": audio_only_path,
             "subtitle_path": subtitle_path,
             "subtitle_name": subtitle_name,
             "vtt_text": vtt_text,

@@ -405,6 +405,21 @@ public class MainActivity extends Activity {
                     if (obj.optBoolean("ok", false)) {
                         String srcPath = obj.getString("filepath");
                         String fileName = obj.getString("filename");
+                        String audioOnlyPath = obj.optString("audio_only_path", "");
+                        if (!audioOnlyPath.isEmpty() && new File(audioOnlyPath).exists()) {
+                            evalJs("window.onDownloadProgress(100, '1080p/4K video ve ses birleştiriliyor...')");
+                            try {
+                                File muxedOut = new File(tempDir, "muxed_" + System.currentTimeMillis() + ".mp4");
+                                File resMux = AndroidDubber.muxVideoAndAudio(new File(srcPath), new File(audioOnlyPath), muxedOut);
+                                if (resMux != null && resMux.exists()) {
+                                    new File(srcPath).delete();
+                                    new File(audioOnlyPath).delete();
+                                    srcPath = resMux.getAbsolutePath();
+                                    int dot = fileName.lastIndexOf('.');
+                                    fileName = (dot > 0 ? fileName.substring(0, dot) : fileName) + ".mp4";
+                                }
+                            } catch (Exception ignored) {}
+                        }
                         org.json.JSONArray dubCues = obj.optJSONArray("dub_cues");
                         if (dubLang != null && !dubLang.trim().isEmpty() && dubCues != null && dubCues.length() > 0) {
                             evalJs("window.onDownloadProgress(100, 'Yapay zeka dublajı seslendiriliyor ve birleştiriliyor...')");

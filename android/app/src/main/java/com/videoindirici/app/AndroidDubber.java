@@ -465,4 +465,83 @@ public class AndroidDubber {
         }
         return outAudioTrack;
     }
+
+    public static File muxVideoAndAudio(File videoFile, File audioFile, File outMp4) throws Exception {
+        MediaExtractor vExt = new MediaExtractor();
+        MediaExtractor aExt = new MediaExtractor();
+        MediaMuxer muxer = null;
+        boolean started = false;
+        try {
+            vExt.setDataSource(videoFile.getAbsolutePath());
+            aExt.setDataSource(audioFile.getAbsolutePath());
+            int vIdx = -1;
+            MediaFormat vFmt = null;
+            for (int i = 0; i < vExt.getTrackCount(); i++) {
+                MediaFormat f = vExt.getTrackFormat(i);
+                String mime = f.getString(MediaFormat.KEY_MIME);
+                if (mime != null && mime.startsWith("video/")) {
+                    vIdx = i;
+                    vFmt = f;
+                    break;
+                }
+            }
+            int aIdx = -1;
+            MediaFormat aFmt = null;
+            for (int i = 0; i < aExt.getTrackCount(); i++) {
+                MediaFormat f = aExt.getTrackFormat(i);
+                String mime = f.getString(MediaFormat.KEY_MIME);
+                if (mime != null && mime.startsWith("audio/")) {
+                    aIdx = i;
+                    aFmt = f;
+                    break;
+                }
+            }
+            if (vIdx == -1 || aIdx == -1 || vFmt == null || aFmt == null) {
+                throw new Exception("Video veya ses akışı bulunamadı.");
+            }
+            muxer = new MediaMuxer(outMp4.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+            int outV = muxer.addTrack(vFmt);
+            int outA = muxer.addTrack(aFmt);
+            muxer.start();
+            started = true;
+
+            int maxV = vFmt.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)
+                    ? Math.max(2 * 1024 * 1024, vFmt.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE))
+                    : 2 * 1024 * 1024;
+            ByteBuffer buf = ByteBuffer.allocate(maxV);
+            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+
+            vExt.selectTrack(vIdx);
+            while (true) {
+                int sz = vExt.readSampleData(buf, 0);
+                if (sz < 0) break;
+                info.offset = 0;
+                info.size = sz;
+                info.presentationTimeUs = vExt.getSampleTime();
+                info.flags = vExt.getSampleFlags();
+                muxer.writeSampleData(outV, buf, info);
+                vExt.advance();
+            }
+
+            aExt.selectTrack(aIdx);
+            while (true) {
+                int sz = aExt.readSampleData(buf, 0);
+                if (sz < 0) break;
+                info.offset = 0;
+                info.size = sz;
+                info.presentationTimeUs = aExt.getSampleTime();
+                info.flags = aExt.getSampleFlags();
+                muxer.writeSampleData(outA, buf, info);
+                aExt.advance();
+            }
+            return outMp4.exists() && outMp4.length() > 0 ? outMp4 : null;
+        } finally {
+            try { vExt.release(); } catch (Exception ignored) {}
+            try { aExt.release(); } catch (Exception ignored) {}
+            if (muxer != null) {
+                try { if (started) muxer.stop(); } catch (Exception ignored) {}
+                try { muxer.release(); } catch (Exception ignored) {}
+            }
+        }
+    }
 }
