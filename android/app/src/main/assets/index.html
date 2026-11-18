@@ -98,7 +98,7 @@
       <div class="badges">
         <span class="badge yt">YouTube</span>
         <span class="badge ig">Instagram</span>
-        <span class="badge ok">Bağımsız • v1.4.2</span>
+        <span class="badge ok">Bağımsız • v1.4.3</span>
       </div>
       <h1>Video İndirici</h1>
       <p class="sub">Bilgisayara gerek duymadan doğrudan telefonunuza indirin.</p>
@@ -148,6 +148,12 @@
         </div>
         <div class="bar-bg"><div id="progBar" class="bar-fill"></div></div>
         <div id="statusMsg" class="msg"></div>
+      </div>
+
+      <div id="playerBox" style="display:none; margin-top:4px; flex-direction:column; gap:8px;">
+        <video id="ccVideo" controls playsinline style="width:100%; border-radius:12px; background:#000; max-height:260px;">
+          <track id="ccTrack" kind="subtitles" label="Altyazı (CC)" default />
+        </video>
       </div>
     </div>
   </div>
@@ -272,6 +278,22 @@
         progLabel.textContent = "Tamamlandı!";
         statusMsg.className = "msg ok";
         statusMsg.textContent = `Kaydedildi: ${data.saved_path || data.filename}`;
+        const playerBox = document.getElementById("playerBox");
+        const ccVideo = document.getElementById("ccVideo");
+        const ccTrack = document.getElementById("ccTrack");
+        if (data.video_uri) {
+          ccVideo.src = data.video_uri;
+          if (data.vtt_text) {
+            const vttBlob = new Blob([data.vtt_text], { type: "text/vtt" });
+            ccTrack.src = URL.createObjectURL(vttBlob);
+          } else {
+            ccTrack.removeAttribute("src");
+          }
+          playerBox.style.display = "flex";
+          if (ccVideo.textTracks && ccVideo.textTracks[0]) {
+            ccVideo.textTracks[0].mode = data.vtt_text ? "showing" : "disabled";
+          }
+        }
       } else {
         progLabel.textContent = "Hata";
         statusMsg.className = "msg err";
@@ -282,7 +304,7 @@
     searchBtn.addEventListener("click", runSearchOrInfo);
     dlBtn.addEventListener("click", () => startDl());
 
-    const CURRENT_VER = "1.4.2";
+    const CURRENT_VER = "1.4.3";
     let updateBusy = false;
 
     window.onUpdateProgress = (pct, text) => {

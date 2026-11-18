@@ -67,7 +67,7 @@ public class MainActivity extends Activity {
         settings.setDomStorageEnabled(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(false);
-        settings.setAllowContentAccess(false);
+        settings.setAllowContentAccess(true);
         settings.setAllowFileAccessFromFileURLs(false);
         settings.setAllowUniversalAccessFromFileURLs(false);
         settings.setGeolocationEnabled(false);
@@ -138,7 +138,7 @@ public class MainActivity extends Activity {
         runOnUiThread(() -> webView.evaluateJavascript(js, null));
     }
 
-    private String saveToPublicDownloads(File sourceFile, String fileName) throws Exception {
+    private String[] saveToPublicDownloadsWithUri(File sourceFile, String fileName) throws Exception {
         String mime = fileName.toLowerCase().endsWith(".m4a") || fileName.toLowerCase().endsWith(".mp3")
                 ? "audio/mp4"
                 : "video/mp4";
@@ -163,7 +163,7 @@ public class MainActivity extends Activity {
                 }
             }
             sourceFile.delete();
-            return "İndirilenler/VideoIndirici/" + fileName;
+            return new String[]{"İndirilenler/VideoIndirici/" + fileName, uri.toString()};
         } else {
             File dir = new File(
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
@@ -181,7 +181,7 @@ public class MainActivity extends Activity {
             }
             sourceFile.delete();
             MediaScannerConnection.scanFile(this, new String[]{dest.getAbsolutePath()}, null, null);
-            return dest.getAbsolutePath();
+            return new String[]{dest.getAbsolutePath(), ""};
         }
     }
 
@@ -399,16 +399,30 @@ public class MainActivity extends Activity {
                     if (obj.optBoolean("ok", false)) {
                         String srcPath = obj.getString("filepath");
                         String fileName = obj.getString("filename");
-                        String savedPath = saveToPublicDownloads(new File(srcPath), fileName);
-                        String subPath = obj.optString("subtitle_path", "");
-                        String subName = obj.optString("subtitle_name", "");
-                        if (!subPath.isEmpty() && !subName.isEmpty()) {
-                            File subFile = new File(subPath);
-                            if (subFile.exists()) {
-                                saveToPublicDownloads(subFile, subName);
-                            }
+                        org.json.JSONArray dubCues = obj.optJSONArray("dub_cues");
+                        if (dubLang != null && !dubLang.trim().isEmpty() && dubCues != null && dubCues.length() > 0) {
+                            evalJs("window.onDownloadProgress(100, 'Yapay zeka dublajı seslendiriliyor ve birleştiriliyor...')");
+                            try {
+                                File dubbed = AndroidDubber.dubVideo(
+                                        MainActivity.this, new File(srcPath), dubCues, dubLang.trim().toLowerCase(), tempDir
+                                );
+                                if (dubbed != null && dubbed.exists()) {
+                                    new File(srcPath).delete();
+                                    srcPath = dubbed.getAbsolutePath();
+                                    int dot = fileName.lastIndexOf('.');
+                                    String tag = " [Dub-" + dubLang.trim().toUpperCase() + "]";
+                                    fileName = dot > 0 ? fileName.substring(0, dot) + tag + fileName.substring(dot) : fileName + tag;
+                                }
+                            } catch (Exception ignored) {}
                         }
-                        obj.put("saved_path", savedPath);
+                        String subPath = obj.optString("subtitle_path", "");
+                        if (!subPath.isEmpty()) {
+                            File subFile = new File(subPath);
+                            if (subFile.exists()) subFile.delete();
+                        }
+                        String[] saved = saveToPublicDownloadsWithUri(new File(srcPath), fileName);
+                        obj.put("saved_path", saved[0]);
+                        obj.put("video_uri", saved[1]);
                     }
                     evalJs("window.onDownloadDone(" + JSONObject.quote(obj.toString()) + ")");
                 } catch (Exception e) {

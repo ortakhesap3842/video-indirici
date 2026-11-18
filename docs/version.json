@@ -1,5 +1,5 @@
 {
-  "version": "1.4.2",
+  "version": "1.4.3",
   "download_url": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
   "downloads": {
     "windows": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
@@ -7,5 +7,5 @@
     "android": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.apk",
     "ios": "./app.html"
   },
-  "notes": "v1.4.2: YouTube altyazı HTTP 429 hatası düzeltildi, Android dublaj çevirisi ve konuşmacı ses tonuna göre nöral dublaj eşleştirme eklendi."
+  "notes": "v1.4.3: Android yerel TTS + MediaMuxer ile tek MP4 dublaj birleştirme ve uygulama içi canlı CC altyazılı video oynatıcı."
 }

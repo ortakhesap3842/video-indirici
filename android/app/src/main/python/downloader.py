@@ -150,7 +150,34 @@ def _expand_sub_langs(lang_code):
     return [code]
 
 
-def _translate_srt_file(src_path, target_lang):
+def _ts_to_ms(ts_str):
+    parts = ts_str.strip().replace(",", ".").split(":")
+    if len(parts) == 2:
+        h, m, s = 0, int(parts[0]), float(parts[1])
+    elif len(parts) == 3:
+        h, m, s = int(parts[0]), int(parts[1]), float(parts[2])
+    else:
+        return 0
+    return int((h * 3600 + m * 60 + s) * 1000)
+
+
+def _srt_to_vtt_text(sub_path):
+    try:
+        raw = open(sub_path, "r", encoding="utf-8", errors="ignore").read()
+        if raw.lstrip().startswith("WEBVTT"):
+            return raw
+        lines = ["WEBVTT\n"]
+        for ln in raw.splitlines():
+            if "-->" in ln:
+                lines.append(ln.replace(",", "."))
+            else:
+                lines.append(ln)
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _translate_srt_cues(src_path, target_lang):
     try:
         import urllib.parse
         text = open(src_path, "r", encoding="utf-8", errors="ignore").read()
@@ -191,7 +218,8 @@ def _translate_srt_file(src_path, target_lang):
             merged.append((cur_start, cur_end, " ".join(cur_parts)))
 
         out_blocks = []
-        for idx, (st, en, body) in enumerate(merged, start=1):
+        dub_cues = []
+        for idx, (st, en, body) in enumerate(merged[:60], start=1):
             try:
                 q = urllib.parse.quote(body)
                 u = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={tl}&dt=t&q={q}"
@@ -202,14 +230,15 @@ def _translate_srt_file(src_path, target_lang):
             except Exception:
                 tr = body
             out_blocks.append(f"{idx}\n{st} --> {en}\n{tr}")
+            dub_cues.append({"start_ms": _ts_to_ms(st), "text": tr})
         if not out_blocks:
-            return None
+            return None, []
         dub_path = os.path.splitext(src_path)[0] + f".dub-{target_lang}.srt"
         with open(dub_path, "w", encoding="utf-8") as f:
             f.write("\n\n".join(out_blocks) + "\n")
-        return dub_path
+        return dub_path, dub_cues
     except Exception:
-        return None
+        return None, []
 
 
 def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="", dub_lang=""):
@@ -276,6 +305,8 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
 
         subtitle_path = ""
         subtitle_name = ""
+        vtt_text = ""
+        dub_cues = []
         sub_note = ""
         if (sub_langs or dub_langs) and quality != "audio" and filepath:
             want_langs = sub_langs if sub_langs else dub_langs
@@ -298,15 +329,18 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
                 with yt_dlp.YoutubeDL(sub_opts) as sydl:
                     sydl.extract_info(clean_url, download=True)
             except Exception:
-                sub_note = " (Altyazı YouTube hız sınırına takıldı, video kaydedildi)"
+                sub_note = " (Altyazı hız sınırına takıldı)"
 
             stem = os.path.splitext(filepath)[0]
             for fn in os.listdir(output_dir):
                 full = os.path.join(output_dir, fn)
                 if full.startswith(stem) and os.path.splitext(fn)[1].lower() in (".srt", ".vtt"):
+                    vtt_text = _srt_to_vtt_text(full)
                     if dub_langs:
-                        translated = _translate_srt_file(full, dub_langs[0])
+                        translated, dub_cues = _translate_srt_cues(full, dub_langs[0])
                         if translated:
+                            if not sub_langs:
+                                vtt_text = _srt_to_vtt_text(translated)
                             subtitle_path = translated
                             subtitle_name = os.path.basename(translated)
                             break
@@ -320,6 +354,8 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
             "filename": os.path.basename(filepath),
             "subtitle_path": subtitle_path,
             "subtitle_name": subtitle_name,
+            "vtt_text": vtt_text,
+            "dub_cues": dub_cues,
             "title": (info.get("title") or "Video") + sub_note,
         }, ensure_ascii=False)
     except Exception as exc:
