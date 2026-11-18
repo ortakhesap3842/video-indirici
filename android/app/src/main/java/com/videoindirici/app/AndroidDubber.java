@@ -9,6 +9,7 @@ import android.media.MediaMuxer;
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
+import android.speech.tts.Voice;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -35,11 +36,116 @@ public class AndroidDubber {
         int dataSize;
     }
 
+    private static float[] analyzeOriginalSpeaker(File inputMp4) {
+        // Returns [pitchFactor, rateFactor, isFemaleFlag (0 or 1)]
+        float[] profile = new float[]{1.0f, 1.0f, 0.0f};
+        MediaExtractor ext = new MediaExtractor();
+        MediaCodec dec = null;
+        try {
+            ext.setDataSource(inputMp4.getAbsolutePath());
+            int audioIdx = -1;
+            MediaFormat audioFmt = null;
+            for (int i = 0; i < ext.getTrackCount(); i++) {
+                MediaFormat f = ext.getTrackFormat(i);
+                String mime = f.getString(MediaFormat.KEY_MIME);
+                if (mime != null && mime.startsWith("audio/")) {
+                    audioIdx = i;
+                    audioFmt = f;
+                    break;
+                }
+            }
+            if (audioIdx == -1 || audioFmt == null) return profile;
+            ext.selectTrack(audioIdx);
+            ext.seekTo(2_000_000L, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
+
+            int sampleRate = audioFmt.containsKey(MediaFormat.KEY_SAMPLE_RATE)
+                    ? audioFmt.getInteger(MediaFormat.KEY_SAMPLE_RATE) : 44100;
+            int channels = audioFmt.containsKey(MediaFormat.KEY_CHANNEL_COUNT)
+                    ? audioFmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT) : 1;
+
+            dec = MediaCodec.createDecoderByType(audioFmt.getString(MediaFormat.KEY_MIME));
+            dec.configure(audioFmt, null, null, 0);
+            dec.start();
+
+            List<Short> mono = new ArrayList<>();
+            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+            boolean sawInputEos = false;
+            int targetSamples = sampleRate * 4;
+
+            while (mono.size() < targetSamples) {
+                if (!sawInputEos) {
+                    int inIdx = dec.dequeueInputBuffer(5000);
+                    if (inIdx >= 0) {
+                        ByteBuffer inBuf = dec.getInputBuffer(inIdx);
+                        int sz = inBuf != null ? ext.readSampleData(inBuf, 0) : -1;
+                        if (sz < 0) {
+                            dec.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                            sawInputEos = true;
+                        } else {
+                            dec.queueInputBuffer(inIdx, 0, sz, ext.getSampleTime(), 0);
+                            ext.advance();
+                        }
+                    }
+                }
+                int outIdx = dec.dequeueOutputBuffer(info, 5000);
+                if (outIdx >= 0) {
+                    ByteBuffer outBuf = dec.getOutputBuffer(outIdx);
+                    if (outBuf != null && info.size > 0) {
+                        outBuf.position(info.offset);
+                        outBuf.limit(info.offset + info.size);
+                        ByteBuffer le = outBuf.slice().order(ByteOrder.LITTLE_ENDIAN);
+                        while (le.remaining() >= 2 * channels && mono.size() < targetSamples) {
+                            short s = le.getShort();
+                            for (int c = 1; c < channels; c++) le.getShort();
+                            mono.add(s);
+                        }
+                    }
+                    dec.releaseOutputBuffer(outIdx, false);
+                    if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) break;
+                } else if (outIdx == MediaCodec.INFO_TRY_AGAIN_LATER && sawInputEos) {
+                    break;
+                }
+            }
+
+            if (mono.size() >= sampleRate) {
+                int minLag = Math.max(20, sampleRate / 280);
+                int maxLag = Math.min(mono.size() / 2, sampleRate / 80);
+                int bestLag = (minLag + maxLag) / 2;
+                double bestCorr = -1;
+                int limit = Math.min(mono.size() - maxLag, sampleRate * 2);
+                for (int lag = minLag; lag <= maxLag; lag += 2) {
+                    double corr = 0;
+                    for (int i = 0; i < limit; i += 6) {
+                        corr += (double) mono.get(i) * mono.get(i + lag);
+                    }
+                    if (corr > bestCorr) {
+                        bestCorr = corr;
+                        bestLag = lag;
+                    }
+                }
+                double estHz = (double) sampleRate / bestLag;
+                if (estHz >= 165.0) {
+                    profile[2] = 1.0f;
+                    profile[0] = estHz > 205.0 ? 1.08f : 1.02f;
+                } else {
+                    profile[2] = 0.0f;
+                    profile[0] = estHz < 110.0 ? 0.90f : 0.96f;
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            try { if (dec != null) { dec.stop(); dec.release(); } } catch (Exception ignored) {}
+            try { ext.release(); } catch (Exception ignored) {}
+        }
+        return profile;
+    }
+
     public static File dubVideo(Context context, File inputMp4, JSONArray cuesJson, String langCode, File workDir) throws Exception {
         if (cuesJson == null || cuesJson.length() == 0 || !inputMp4.exists()) {
             return null;
         }
 
+        final float[] speaker = analyzeOriginalSpeaker(inputMp4);
         final AtomicBoolean ttsReady = new AtomicBoolean(false);
         final CountDownLatch initLatch = new CountDownLatch(1);
         final TextToSpeech[] ttsHolder = new TextToSpeech[1];
@@ -48,7 +154,31 @@ public class AndroidDubber {
             if (status == TextToSpeech.SUCCESS) {
                 Locale loc = Locale.forLanguageTag("zh".equals(langCode) ? "zh-CN" : langCode);
                 int res = ttsHolder[0].setLanguage(loc);
-                ttsReady.set(res != TextToSpeech.LANG_MISSING_DATA && res != TextToSpeech.LANG_NOT_SUPPORTED);
+                if (res != TextToSpeech.LANG_MISSING_DATA && res != TextToSpeech.LANG_NOT_SUPPORTED) {
+                    try {
+                        Voice bestVoice = null;
+                        int bestScore = -1;
+                        if (ttsHolder[0].getVoices() != null) {
+                            for (Voice v : ttsHolder[0].getVoices()) {
+                                if (!v.getLocale().getLanguage().equalsIgnoreCase(loc.getLanguage())) continue;
+                                int score = v.getQuality();
+                                if (v.isNetworkConnectionRequired()) score += 150; // Prefer natural neural voices
+                                String vName = v.getName().toLowerCase(Locale.US);
+                                boolean wantsFemale = speaker[2] > 0.5f;
+                                if (wantsFemale && (vName.contains("female") || vName.contains("-f-") || vName.contains("emel"))) score += 100;
+                                if (!wantsFemale && (vName.contains("male") || vName.contains("-m-") || vName.contains("ahmet"))) score += 100;
+                                if (score > bestScore) {
+                                    bestScore = score;
+                                    bestVoice = v;
+                                }
+                            }
+                        }
+                        if (bestVoice != null) ttsHolder[0].setVoice(bestVoice);
+                    } catch (Exception ignored) {}
+                    ttsHolder[0].setPitch(speaker[0]);
+                    ttsHolder[0].setSpeechRate(speaker[1]);
+                    ttsReady.set(true);
+                }
             }
             initLatch.countDown();
         });
@@ -259,7 +389,10 @@ public class AndroidDubber {
 
             // Write video samples
             extractor.selectTrack(videoTrackIdx);
-            ByteBuffer vBuf = ByteBuffer.allocate(1024 * 1024);
+            int maxBuf = videoFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)
+                    ? Math.max(2 * 1024 * 1024, videoFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE))
+                    : 2 * 1024 * 1024;
+            ByteBuffer vBuf = ByteBuffer.allocate(maxBuf);
             MediaCodec.BufferInfo vInfo = new MediaCodec.BufferInfo();
             while (true) {
                 int sampleSize = extractor.readSampleData(vBuf, 0);

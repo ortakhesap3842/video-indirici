@@ -309,7 +309,24 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
         dub_cues = []
         sub_note = ""
         if (sub_langs or dub_langs) and quality != "audio" and filepath:
-            want_langs = sub_langs if sub_langs else dub_langs
+            avail_subs = list((info.get("subtitles") or {}).keys())
+            avail_auto = list((info.get("automatic_captions") or {}).keys())
+            all_avail = avail_subs + [k for k in avail_auto if k not in avail_subs]
+            want_langs = []
+            if sub_langs and sub_langs[0] in all_avail:
+                want_langs = [sub_langs[0]]
+            elif dub_langs and dub_langs[0] in all_avail:
+                want_langs = [dub_langs[0]]
+            else:
+                vid_lang = (info.get("language") or "").lower()
+                if vid_lang and vid_lang in all_avail:
+                    want_langs = [vid_lang]
+                elif "en" in all_avail:
+                    want_langs = ["en"]
+                elif all_avail:
+                    want_langs = [all_avail[0]]
+                else:
+                    want_langs = (sub_langs if sub_langs else dub_langs)[:1]
             sub_opts = {
                 "outtmpl": os.path.join(output_dir, "%(title).100s [%(id)s].%(ext)s"),
                 "noplaylist": True,

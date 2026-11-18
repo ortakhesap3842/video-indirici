@@ -158,7 +158,26 @@ def run_download_job(
                 filepath = str(Path(filepath).with_suffix(".mp4"))
 
         if (sub_langs or dub_code) and quality != "audio" and filepath:
-            want_langs = sub_langs if sub_langs else [dub_code]
+            avail_subs = list((info.get("subtitles") or {}).keys())
+            avail_auto = list((info.get("automatic_captions") or {}).keys())
+            all_avail = avail_subs + [k for k in avail_auto if k not in avail_subs]
+            want_langs: List[str] = []
+            if sub_langs and sub_langs[0] in all_avail:
+                want_langs = [sub_langs[0]]
+            elif dub_code and dub_code in all_avail:
+                want_langs = [dub_code]
+            else:
+                vid_lang = (info.get("language") or "").lower()
+                if vid_lang and vid_lang in all_avail:
+                    want_langs = [vid_lang]
+                elif "en" in all_avail:
+                    want_langs = ["en"]
+                elif all_avail:
+                    want_langs = [all_avail[0]]
+                elif sub_langs:
+                    want_langs = sub_langs[:1]
+                elif dub_code:
+                    want_langs = [dub_code]
             sub_opts: Dict[str, Any] = {
                 "outtmpl": str(DEFAULT_DOWNLOAD_DIR / "%(title).120B [%(id)s].%(ext)s"),
                 "noplaylist": True,

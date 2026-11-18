@@ -1,5 +1,5 @@
 {
-  "version": "1.4.3",
+  "version": "1.4.4",
   "download_url": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
   "downloads": {
     "windows": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
@@ -7,5 +7,5 @@
     "android": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.apk",
     "ios": "./app.html"
   },
-  "notes": "v1.4.3: Android yerel TTS + MediaMuxer ile tek MP4 dublaj birleştirme ve uygulama içi canlı CC altyazılı video oynatıcı."
+  "notes": "v1.4.4: AI Dublaj ses analizi, FFmpeg normalize=0 ses düzeltmesi ve kaynak altyazı otomatik bulma iyileştirmesi."
 }

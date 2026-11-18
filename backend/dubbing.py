@@ -41,40 +41,55 @@ NEURAL_VOICES_BY_GENDER: Dict[str, Dict[str, str]] = {
 }
 
 
-def estimate_speaker_profile(video_path: Path, ffmpeg_exe: str) -> Tuple[str, str]:
-    """Estimate speaker vocal gender ('male'/'female') and pitch shift from video audio."""
+def estimate_speaker_profile(video_path: Path, ffmpeg_exe: str) -> Tuple[str, str, str]:
+    """Analyze original speaker vocal gender, pitch, and speaking cadence from video audio."""
     try:
         with tempfile.TemporaryDirectory(prefix="vi_pitch_") as td:
             wav_path = Path(td) / "sample.wav"
             subprocess.run(
-                [ffmpeg_exe, "-y", "-ss", "2", "-t", "10", "-i", str(video_path),
+                [ffmpeg_exe, "-y", "-ss", "2", "-t", "12", "-i", str(video_path),
                  "-ac", "1", "-ar", "16000", "-vn", str(wav_path)],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20,
             )
             if not wav_path.exists():
-                return "male", "+0Hz"
+                return "male", "+0Hz", "+0%"
             with wave.open(str(wav_path), "rb") as wf:
                 raw = wf.readframes(wf.getnframes())
             samples = array.array("h")
             samples.frombytes(raw)
             if len(samples) < 3200:
-                return "male", "+0Hz"
-            # Estimate dominant fundamental frequency via autocorrelation in 80-280 Hz range
+                return "male", "+0Hz", "+0%"
+
             step = 16000
             chunk = samples[: min(len(samples), step * 4)]
             best_lag = 120
             best_corr = -1.0
-            for lag in range(57, 200):  # 16000/200=80Hz to 16000/57=280Hz
+            for lag in range(57, 200):
                 corr = sum(chunk[i] * chunk[i + lag] for i in range(0, len(chunk) - lag, 4))
                 if corr > best_corr:
                     best_corr = corr
                     best_lag = lag
             est_hz = step / best_lag
+
+            # Estimate speaking cadence from short-window energy bursts
+            win = 1600  # 100ms
+            active_transitions = 0
+            was_active = False
+            for idx in range(0, len(samples) - win, win):
+                rms = sum(abs(samples[j]) for j in range(idx, idx + win, 8)) / (win / 8)
+                is_act = rms > 600
+                if is_act and not was_active:
+                    active_transitions += 1
+                was_active = is_act
+            rate_str = "+6%" if active_transitions > 18 else ("-4%" if active_transitions < 8 else "+0%")
+
             if est_hz >= 165.0:
-                return "female", "+6Hz" if est_hz > 205.0 else "+0Hz"
-            return "male", "-6Hz" if est_hz < 110.0 else "+0Hz"
+                pitch_str = "+6Hz" if est_hz > 205.0 else "+0Hz"
+                return "female", pitch_str, rate_str
+            pitch_str = "-6Hz" if est_hz < 110.0 else "+0Hz"
+            return "male", pitch_str, rate_str
     except Exception:
-        return "male", "+0Hz"
+        return "male", "+0Hz", "+0%"
 
 
 def _time_to_ms(ts: str) -> int:
@@ -167,14 +182,14 @@ def translate_text_contextual(text: str, target_lang: str) -> str:
 
 
 async def _synth_edge_tts(
-    segments: List[Tuple[int, str]], voice: str, out_dir: Path, pitch: str = "+0Hz"
+    segments: List[Tuple[int, str]], voice: str, out_dir: Path, pitch: str = "+0Hz", rate: str = "+0%"
 ) -> List[Tuple[int, Path]]:
     import edge_tts
 
     audio_parts: List[Tuple[int, Path]] = []
     for idx, (start_ms, txt) in enumerate(segments):
         part_path = out_dir / f"seg_{idx:04d}.mp3"
-        communicate = edge_tts.Communicate(txt, voice, pitch=pitch)
+        communicate = edge_tts.Communicate(txt, voice, pitch=pitch, rate=rate)
         await communicate.save(str(part_path))
         if part_path.exists() and part_path.stat().st_size > 0:
             audio_parts.append((start_ms, part_path))
@@ -186,7 +201,7 @@ def apply_ai_dubbing(
 ) -> Optional[Path]:
     """Generate speaker-matched contextual neural TTS dubbing track and mux into the video."""
     lang = dub_lang.strip().lower()
-    gender, pitch = estimate_speaker_profile(video_path, ffmpeg_exe)
+    gender, pitch, rate = estimate_speaker_profile(video_path, ffmpeg_exe)
     voice = NEURAL_VOICES_BY_GENDER.get(lang, {}).get(gender) or NEURAL_VOICES.get(lang)
     if not voice or not video_path.exists() or not sub_path.exists():
         return None
@@ -207,7 +222,7 @@ def apply_ai_dubbing(
     with tempfile.TemporaryDirectory(prefix="vi_dub_") as tmp_dir:
         tmp_path = Path(tmp_dir)
         try:
-            audio_parts = asyncio.run(_synth_edge_tts(translated_segments, voice, tmp_path, pitch=pitch))
+            audio_parts = asyncio.run(_synth_edge_tts(translated_segments, voice, tmp_path, pitch=pitch, rate=rate))
         except Exception:
             return None
 
@@ -216,7 +231,7 @@ def apply_ai_dubbing(
 
         dub_out = video_path.with_name(f"{video_path.stem} [Dub-{lang.upper()}]{video_path.suffix}")
         cmd = [ffmpeg_exe, "-y", "-i", str(video_path)]
-        filter_parts = ["[0:a]volume=0.15[orig]"]
+        filter_parts = ["[0:a]volume=0.20[orig]"]
         mix_inputs = ["[orig]"]
 
         for i, (start_ms, seg_path) in enumerate(audio_parts, start=1):
@@ -225,7 +240,10 @@ def apply_ai_dubbing(
             filter_parts.append(f"[{i}:a]adelay={delay}|{delay}[d{i}]")
             mix_inputs.append(f"[d{i}]")
 
-        mix_chain = "".join(mix_inputs) + f"amix=inputs={len(mix_inputs)}:duration=first:dropout_transition=2[aout]"
+        mix_chain = (
+            "".join(mix_inputs)
+            + f"amix=inputs={len(mix_inputs)}:duration=first:dropout_transition=2:normalize=0[aout]"
+        )
         filter_parts.append(mix_chain)
         cmd.extend([
             "-filter_complex", ";".join(filter_parts),

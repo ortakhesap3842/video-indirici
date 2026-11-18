@@ -413,7 +413,9 @@ public class MainActivity extends Activity {
                                     String tag = " [Dub-" + dubLang.trim().toUpperCase() + "]";
                                     fileName = dot > 0 ? fileName.substring(0, dot) + tag + fileName.substring(dot) : fileName + tag;
                                 }
-                            } catch (Exception ignored) {}
+                            } catch (Exception dubEx) {
+                                obj.put("dub_note", "Dublaj uygulanamadı: " + dubEx.getMessage());
+                            }
                         }
                         String subPath = obj.optString("subtitle_path", "");
                         if (!subPath.isEmpty()) {
