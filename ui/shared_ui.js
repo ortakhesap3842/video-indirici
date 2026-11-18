@@ -110,6 +110,25 @@
     { code: "pt", label: "Portekizce (PT)" }
   ];
 
+  var QUALITY_OPTIONS = [
+    { value: "best", label: "En İyi MP4" },
+    { value: "1080", label: "1080p MP4" },
+    { value: "720", label: "720p MP4" },
+    { value: "480", label: "480p MP4" },
+    { value: "audio", label: "Sadece Ses" }
+  ];
+
+  function populateQualitySelect(selectEl, audioSuffix) {
+    if (!selectEl) return;
+    selectEl.innerHTML = "";
+    QUALITY_OPTIONS.forEach(function (q) {
+      var opt = document.createElement("option");
+      opt.value = q.value;
+      opt.textContent = q.value === "audio" && audioSuffix ? q.label + " (" + audioSuffix + ")" : q.label;
+      selectEl.appendChild(opt);
+    });
+  }
+
   function populateLanguageSelect(selectEl, defaultLabel) {
     if (!selectEl) return;
     selectEl.innerHTML = "";
@@ -126,10 +145,12 @@
   }
 
   global.VideoIndiriciUI = {
+    QUALITY_OPTIONS: QUALITY_OPTIONS,
     WORLD_LANGUAGES: WORLD_LANGUAGES,
     formatDuration: formatDuration,
     isHttpUrl: isHttpUrl,
     populateLanguageSelect: populateLanguageSelect,
+    populateQualitySelect: populateQualitySelect,
     renderSearchResults: renderSearchResults,
   };
 })(window);

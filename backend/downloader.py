@@ -21,6 +21,16 @@ jobs: Dict[str, Dict[str, Any]] = {}
 jobs_lock = threading.Lock()
 
 
+def _get_yt_cookies_opt() -> Optional[str]:
+    env_c = os.environ.get("YT_COOKIES_FILE", "").strip()
+    if env_c and Path(env_c).is_file():
+        return env_c
+    default_c = Path.home() / ".video_indirici" / "cookies.txt"
+    if default_c.is_file():
+        return str(default_c)
+    return None
+
+
 def get_ffmpeg_location() -> Optional[str]:
     system_ffmpeg = shutil.which("ffmpeg")
     if system_ffmpeg:
@@ -127,9 +137,13 @@ def run_download_job(
         "no_warnings": True,
         "restrictfilenames": False,
         "windowsfilenames": True,
+        "extractor_args": {"youtube": {"player_client": ["android", "ios", "tv", "web"]}},
         "progress_hooks": [progress_hook],
         **fmt_opts,
     }
+    cookie_file = _get_yt_cookies_opt()
+    if cookie_file:
+        ydl_opts["cookiefile"] = cookie_file
     ffmpeg_loc = get_ffmpeg_location()
     if ffmpeg_loc:
         ydl_opts["ffmpeg_location"] = ffmpeg_loc
@@ -286,12 +300,16 @@ def search_youtube_items(query: str, limit: int) -> List[Dict[str, Any]]:
 
 
 def extract_video_info(url: str) -> Dict[str, Any]:
-    ydl_opts = {
+    ydl_opts: Dict[str, Any] = {
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
         "skip_download": True,
+        "extractor_args": {"youtube": {"player_client": ["android", "ios", "tv", "web"]}},
     }
+    cookie_file = _get_yt_cookies_opt()
+    if cookie_file:
+        ydl_opts["cookiefile"] = cookie_file
     try:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:

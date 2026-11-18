@@ -75,6 +75,18 @@ class CoreTests(unittest.TestCase):
         storage.save_ban("198.51.100.99", time.time() - 5)
         self.assertEqual(storage.get_ban_until("198.51.100.99"), 0.0)
 
+    def test_cookies_helper(self):
+        from backend.downloader import _get_yt_cookies_opt
+
+        with tempfile.TemporaryDirectory() as td:
+            cf = Path(td) / "cookies.txt"
+            cf.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+            os.environ["YT_COOKIES_FILE"] = str(cf)
+            try:
+                self.assertEqual(_get_yt_cookies_opt(), str(cf))
+            finally:
+                os.environ.pop("YT_COOKIES_FILE", None)
+
 
 if __name__ == "__main__":
     unittest.main()
