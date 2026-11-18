@@ -327,7 +327,7 @@ def apply_ai_dubbing(
 
         dub_out = video_path.with_name(f"{video_path.stem} [Dub-{lang.upper()}]{video_path.suffix}")
         cmd = [ffmpeg_exe, "-y", "-i", str(video_path)]
-        filter_parts = ["[0:a]volume=0.20[orig]"]
+        filter_parts = ["[0:a]volume=0[orig]"]
         mix_inputs = ["[orig]"]
 
         for i, (start_ms, seg_path) in enumerate(audio_parts, start=1):
@@ -353,4 +353,89 @@ def apply_ai_dubbing(
         res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
         if res.returncode == 0 and dub_out.exists() and dub_out.stat().st_size > 0:
             return dub_out
+    return None
+
+
+def _fmt_srt_ts(seconds: float) -> str:
+    ms = max(0, int(seconds * 1000))
+    h, r = divmod(ms, 3600000)
+    m, r = divmod(r, 60000)
+    s, ml = divmod(r, 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ml:03d}"
+
+
+def transcribe_video_to_srt(
+    video_path: Path, ffmpeg_exe: str, out_srt: Path, gemini_api_key: str = ""
+) -> Optional[Path]:
+    """Generate SRT subtitles from video audio using faster-whisper (or Gemini audio fallback)."""
+    if not video_path.exists() or not ffmpeg_exe:
+        return None
+    with tempfile.TemporaryDirectory(prefix="vi_stt_") as td:
+        wav_path = Path(td) / "audio16k.wav"
+        mp3_path = Path(td) / "audio.mp3"
+        subprocess.run(
+            [ffmpeg_exe, "-y", "-i", str(video_path), "-ac", "1", "-ar", "16000", "-vn", str(wav_path)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180,
+        )
+        if not wav_path.exists() or wav_path.stat().st_size == 0:
+            return None
+
+        # 1. Offline faster-whisper
+        try:
+            from faster_whisper import WhisperModel
+
+            model = WhisperModel("base", device="cpu", compute_type="int8")
+            segments, _info = model.transcribe(str(wav_path), beam_size=3, vad_filter=True)
+            blocks = []
+            for idx, seg in enumerate(segments, start=1):
+                txt = (seg.text or "").strip()
+                if txt:
+                    blocks.append(f"{idx}\n{_fmt_srt_ts(seg.start)} --> {_fmt_srt_ts(seg.end)}\n{txt}")
+            if blocks:
+                out_srt.write_text("\n\n".join(blocks) + "\n", encoding="utf-8")
+                return out_srt
+        except Exception:
+            pass
+
+        # 2. Gemini multimodal audio fallback if API key is set
+        key = (gemini_api_key or os.environ.get("GEMINI_API_KEY", "")).strip()
+        if key:
+            try:
+                import base64
+
+                subprocess.run(
+                    [ffmpeg_exe, "-y", "-i", str(wav_path), "-b:a", "48k", str(mp3_path)],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120,
+                )
+                if mp3_path.exists() and mp3_path.stat().st_size <= 18_000_000:
+                    b64 = base64.b64encode(mp3_path.read_bytes()).decode("ascii")
+                    payload = {
+                        "contents": [{
+                            "parts": [
+                                {"inlineData": {"mimeType": "audio/mp3", "data": b64}},
+                                {"text": "Transcribe all spoken dialogue in this audio into valid SRT subtitle format with accurate timestamps. Return ONLY raw SRT text."},
+                            ]
+                        }]
+                    }
+                    url = (
+                        "https://generativelanguage.googleapis.com/v1beta/models/"
+                        f"gemini-2.5-flash:generateContent?key={urllib.parse.quote(key)}"
+                    )
+                    req = urllib.request.Request(
+                        url, data=json.dumps(payload).encode("utf-8"),
+                        headers={"Content-Type": "application/json"}, method="POST",
+                    )
+                    with urllib.request.urlopen(req, timeout=60) as resp:
+                        data = json.loads(resp.read().decode("utf-8"))
+                    srt_txt = (
+                        data.get("candidates", [{}])[0]
+                        .get("content", {})
+                        .get("parts", [{}])[0]
+                        .get("text", "")
+                    ).strip()
+                    if "-->" in srt_txt:
+                        out_srt.write_text(srt_txt + "\n", encoding="utf-8")
+                        return out_srt
+            except Exception:
+                pass
     return None

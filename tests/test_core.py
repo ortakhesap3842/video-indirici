@@ -91,6 +91,9 @@ class CoreTests(unittest.TestCase):
 
     def test_cookies_helper(self):
         from backend.downloader import _get_yt_cookies_opt
+        from backend.dubbing import _fmt_srt_ts
+
+        self.assertEqual(_fmt_srt_ts(3661.5), "01:01:01,500")
 
         with tempfile.TemporaryDirectory() as td:
             cf = Path(td) / "cookies.txt"

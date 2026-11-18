@@ -7,4 +7,5 @@ imageio-ffmpeg>=0.5.1
 qrcode>=7.4
 edge-tts>=6.1.12
 deep-translator>=1.11.4
+faster-whisper>=1.0.3
 

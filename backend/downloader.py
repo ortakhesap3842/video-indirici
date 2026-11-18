@@ -12,7 +12,13 @@ from fastapi import HTTPException
 import yt_dlp
 
 from backend.config import DEFAULT_DOWNLOAD_DIR
-from backend.dubbing import NEURAL_VOICES, apply_ai_dubbing, parse_subtitle_cues
+from backend.dubbing import (
+    NEURAL_VOICES,
+    apply_ai_dubbing,
+    parse_subtitle_cues,
+    transcribe_video_to_srt,
+    translate_cues_contextual,
+)
 from backend.security import detect_platform
 from backend import storage
 from backend.universal import discover_embedded_media_url
@@ -135,7 +141,7 @@ def run_download_job(
             if job_id in jobs:
                 jobs[job_id].update(kwargs)
                 snapshot = dict(jobs[job_id])
-        if snapshot is not None and kwargs.get("status") in ("completed", "error", "dubbing", "processing"):
+        if snapshot is not None and kwargs.get("status") in ("completed", "error", "dubbing", "transcribing", "processing"):
             storage.save_job(job_id, snapshot)
 
     def progress_hook(d: Dict[str, Any]) -> None:
@@ -242,7 +248,29 @@ def run_download_job(
                 if str(p).startswith(stem) and p.suffix.lower() in (".srt", ".vtt"):
                     sub_candidate = p
                     break
+            if sub_candidate is None and ffmpeg_loc:
+                update_job(status="transcribing", percent=100.0, speed="", eta="")
+                stt_srt = Path(filepath).with_suffix(".whisper.srt")
+                sub_candidate = transcribe_video_to_srt(
+                    Path(filepath), ffmpeg_loc, stt_srt, gemini_api_key=gemini_api_key
+                )
             if sub_candidate is not None and ffmpeg_loc:
+                if sub_langs and sub_langs[0] not in sub_candidate.name.lower():
+                    cues = parse_subtitle_cues(sub_candidate)
+                    if cues:
+                        tr_texts = translate_cues_contextual([c[2] for c in cues], sub_langs[0], gemini_api_key)
+                        tr_srt = Path(filepath).with_suffix(f".{sub_langs[0]}.srt")
+                        tr_blocks = []
+                        for idx, (c, tr_t) in enumerate(zip(cues, tr_texts), start=1):
+                            def _fmt_ms(ms: int) -> str:
+                                ms = max(0, int(ms))
+                                h, r = divmod(ms, 3600000)
+                                m, r = divmod(r, 60000)
+                                s, ml = divmod(r, 1000)
+                                return f"{h:02d}:{m:02d}:{s:02d},{ml:03d}"
+                            tr_blocks.append(f"{idx}\n{_fmt_ms(c[0])} --> {_fmt_ms(c[1])}\n{tr_t}")
+                        tr_srt.write_text("\n\n".join(tr_blocks) + "\n", encoding="utf-8")
+                        sub_candidate = tr_srt
                 clean_sub_file = _write_clean_srt(sub_candidate)
                 if sub_langs and Path(filepath).suffix.lower() == ".mp4":
                     tmp_sub_mp4 = Path(filepath).with_name(f"{Path(filepath).stem}.subtmp.mp4")

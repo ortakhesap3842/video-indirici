@@ -91,7 +91,7 @@
     <div class="header">
       <div class="badges">
         <span class="badge">YouTube & Medya</span>
-        <span class="badge ok">Yerel & Bağımsız • v1.4.8</span>
+        <span class="badge ok">Yerel & Bağımsız • v1.4.9</span>
       </div>
       <h1>Video İndirici</h1>
       <p class="sub">Access Key veya sunucu kurulumu olmadan doğrudan cihazınızda indirin.</p>
@@ -156,6 +156,11 @@
       "https://pipedapi.r4fo.com",
       "https://api.piped.private.coffee"
     ];
+    const INVIDIOUS_NODES = [
+      "https://inv.nadeko.net",
+      "https://invidious.nerdvpn.de",
+      "https://yewtu.be"
+    ];
 
     const qInput = document.getElementById("qInput");
     const qualitySelect = document.getElementById("qualitySelect");
@@ -200,7 +205,92 @@
           lastErr = err;
         }
       }
+      // Fallback to Invidious API and normalize into Piped-like shape
+      for (const inv of INVIDIOUS_NODES) {
+        try {
+          if (path.startsWith("/search?q=")) {
+            const q = new URLSearchParams(path.split("?")[1]).get("q") || "";
+            const r = await fetch(`${inv}/api/v1/search?q=${encodeURIComponent(q)}&type=video`, { signal: AbortSignal.timeout(7000) });
+            if (r.ok) {
+              const arr = await r.json();
+              return {
+                items: (arr || []).map((v) => ({
+                  type: "stream",
+                  title: v.title,
+                  url: `/watch?v=${v.videoId}`,
+                  uploaderName: v.author,
+                  duration: v.lengthSeconds || 0,
+                  thumbnail: (v.videoThumbnails && v.videoThumbnails[0] && v.videoThumbnails[0].url) || ""
+                }))
+              };
+            }
+          } else if (path.startsWith("/streams/")) {
+            const vid = path.replace("/streams/", "");
+            const r = await fetch(`${inv}/api/v1/videos/${vid}`, { signal: AbortSignal.timeout(7000) });
+            if (r.ok) {
+              const d = await r.json();
+              return {
+                title: d.title,
+                uploader: d.author,
+                duration: d.lengthSeconds || 0,
+                thumbnailUrl: (d.videoThumbnails && d.videoThumbnails[0] && d.videoThumbnails[0].url) || "",
+                videoStreams: (d.formatStreams || []).map((f) => ({
+                  url: f.url,
+                  height: parseInt(f.resolution, 10) || 360,
+                  videoOnly: false
+                })),
+                audioStreams: (d.adaptiveFormats || []).filter((a) => (a.type || "").startsWith("audio/")).map((a) => ({
+                  url: a.url,
+                  bitrate: parseInt(a.bitrate, 10) || 128000,
+                  audioTrackLocale: a.audioTrack && a.audioTrack.id ? a.audioTrack.id : ""
+                })),
+                subtitles: (d.captions || []).map((c) => ({
+                  code: c.languageCode || "",
+                  url: `${inv}${c.url}`
+                }))
+              };
+            }
+          }
+        } catch (err) {
+          lastErr = err;
+        }
+      }
       throw lastErr || new Error("Video kaynağı çözümlenemedi.");
+    }
+
+    async function tryMuxSubtitlesInBrowser(videoUrl, subUrl, title) {
+      if (!subUrl || !videoUrl || !window.fetch) return null;
+      try {
+        const [vRes, sRes] = await Promise.all([
+          fetch(videoUrl, { signal: AbortSignal.timeout(20000) }),
+          fetch(subUrl, { signal: AbortSignal.timeout(10000) })
+        ]);
+        if (!vRes.ok || !sRes.ok) return null;
+        const vBuf = new Uint8Array(await vRes.arrayBuffer());
+        if (vBuf.byteLength > 45 * 1024 * 1024) return null;
+        const sBuf = new Uint8Array(await sRes.arrayBuffer());
+
+        if (!window.FFmpegWASM) {
+          await new Promise((resolve, reject) => {
+            const sc = document.createElement("script");
+            sc.src = "https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js";
+            sc.onload = resolve;
+            sc.onerror = reject;
+            document.head.appendChild(sc);
+          });
+        }
+        const { FFmpeg } = window.FFmpegWASM;
+        const ff = new FFmpeg();
+        await ff.load({ coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js" });
+        await ff.writeFile("in.mp4", vBuf);
+        await ff.writeFile("sub.vtt", sBuf);
+        await ff.exec(["-i", "in.mp4", "-i", "sub.vtt", "-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text", "out.mp4"]);
+        const outData = await ff.readFile("out.mp4");
+        const blob = new Blob([outData.buffer], { type: "video/mp4" });
+        return URL.createObjectURL(blob);
+      } catch (e) {
+        return null;
+      }
     }
 
     async function runSearchOrInfo() {
@@ -342,7 +432,17 @@
         progFill.style.width = "100%";
         progPct.textContent = "100%";
         progStatus.textContent = "Hazır!";
-        saveFileBtn.href = targetUrl;
+        let finalHref = targetUrl;
+        if (subUrl && qualitySelect.value !== "audio") {
+          progStatus.textContent = "Altyazı tarayıcıda MP4'e ekleniyor...";
+          const muxedBlobUrl = await tryMuxSubtitlesInBrowser(targetUrl, subUrl, title);
+          if (muxedBlobUrl) {
+            finalHref = muxedBlobUrl;
+            saveFileBtn.download = `${title.replace(/[\\/:*?"<>|]/g, "_")}.mp4`;
+          }
+          progStatus.textContent = "Hazır!";
+        }
+        saveFileBtn.href = finalHref;
         saveFileBtn.style.display = "block";
         const iosVideo = document.getElementById("iosVideo");
         const iosTrack = document.getElementById("iosTrack");
@@ -351,6 +451,21 @@
           if (subUrl) iosTrack.src = subUrl;
           else iosTrack.removeAttribute("src");
           iosVideo.style.display = "block";
+          if (dubSelect.value && "speechSynthesis" in window && iosVideo.textTracks) {
+            const trk = iosVideo.textTracks[0];
+            if (trk) {
+              trk.mode = "showing";
+              trk.oncuechange = () => {
+                const active = trk.activeCues && trk.activeCues[0];
+                if (active && active.text) {
+                  window.speechSynthesis.cancel();
+                  const u = new SpeechSynthesisUtterance(active.text);
+                  u.lang = dubSelect.value === "zh" ? "zh-CN" : dubSelect.value;
+                  window.speechSynthesis.speak(u);
+                }
+              };
+            }
+          }
         } else {
           iosVideo.style.display = "none";
         }

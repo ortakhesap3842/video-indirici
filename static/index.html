@@ -917,6 +917,8 @@
           progressLabel.textContent = extra ? `İndiriliyor (${extra})` : "İndiriliyor...";
         } else if (data.status === "processing") {
           progressLabel.textContent = "Video/Ses birleştiriliyor (FFmpeg)...";
+        } else if (data.status === "transcribing") {
+          progressLabel.textContent = "Altyazı bulunamadı; Whisper/AI ile sesten metin çıkarılıyor...";
         } else if (data.status === "dubbing") {
           progressLabel.textContent = "Yapay zeka dublajı ve ses senkronizasyonu hazırlanıyor...";
         } else if (data.status === "completed") {
