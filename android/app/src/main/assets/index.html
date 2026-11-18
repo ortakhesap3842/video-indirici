@@ -44,15 +44,19 @@
       font-size: 14.5px;
       outline: none;
     }
-    .row { display: flex; gap: 8px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .select-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .btn-row { display: flex; gap: 8px; }
+    .btn-row button { flex: 1; }
     select {
-      flex: 1;
+      width: 100%;
+      min-width: 0;
       background: #050811;
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 11px;
-      font-size: 13.5px;
+      padding: 10px 8px;
+      font-size: 12.5px;
     }
     button {
       border: none;
@@ -94,7 +98,7 @@
       <div class="badges">
         <span class="badge yt">YouTube</span>
         <span class="badge ig">Instagram</span>
-        <span class="badge ok">Bağımsız • v1.4.0</span>
+        <span class="badge ok">Bağımsız • v1.4.1</span>
       </div>
       <h1>Video İndirici</h1>
       <p class="sub">Bilgisayara gerek duymadan doğrudan telefonunuza indirin.</p>
@@ -112,7 +116,7 @@
 
     <div class="card">
       <input id="qInput" type="text" placeholder="Herhangi bir video/film sitesi URL'si yapıştırın veya YouTube'da arayın..." />
-      <div class="row">
+      <div class="select-grid">
         <select id="qualitySelect">
           <option value="best">En İyi MP4</option>
           <option value="720">720p MP4</option>
@@ -121,6 +125,8 @@
         </select>
         <select id="ccSelect"></select>
         <select id="dubSelect"></select>
+      </div>
+      <div class="btn-row">
         <button id="searchBtn" class="sec" type="button">Ara / Önizle</button>
         <button id="dlBtn" type="button">İndir</button>
       </div>
@@ -276,7 +282,7 @@
     searchBtn.addEventListener("click", runSearchOrInfo);
     dlBtn.addEventListener("click", () => startDl());
 
-    const CURRENT_VER = "1.4.0";
+    const CURRENT_VER = "1.4.1";
     let updateBusy = false;
 
     window.onUpdateProgress = (pct, text) => {
