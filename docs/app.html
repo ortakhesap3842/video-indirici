@@ -132,6 +132,9 @@
         <div id="statusMsg" class="msg"></div>
         <a id="saveFileBtn" class="btn-link btn-primary" style="display:none;" target="_blank" rel="noopener">Telefona Kaydet / Aç</a>
         <a id="saveSubBtn" class="btn-link btn-secondary" style="display:none;" target="_blank" rel="noopener">Altyazı (CC) İndir</a>
+        <video id="iosVideo" controls playsinline style="display:none; width:100%; border-radius:12px; background:#000; max-height:240px;">
+          <track id="iosTrack" kind="subtitles" label="Altyazı (CC)" default />
+        </video>
       </div>
     </div>
 
@@ -318,9 +321,19 @@
             targetUrl = chosen.url;
           }
           const wantSub = (ccSelect.value || "").toLowerCase();
-          if (wantSub && Array.isArray(data.subtitles)) {
-            const match = data.subtitles.find((s) => (s.code || "").toLowerCase() === wantSub)
-              || data.subtitles.find((s) => (s.code || "").toLowerCase().startsWith(wantSub));
+          const wantDub = (dubSelect.value || "").toLowerCase();
+          if (wantDub && Array.isArray(data.audioStreams)) {
+            const dubAudio = data.audioStreams.find(
+              (a) => ((a.audioTrackLocale || a.audioTrackId || "").toLowerCase()).startsWith(wantDub)
+            );
+            if (dubAudio && dubAudio.url && q === "audio") {
+              targetUrl = dubAudio.url;
+            }
+          }
+          const trackLang = wantSub || wantDub;
+          if (trackLang && Array.isArray(data.subtitles)) {
+            const match = data.subtitles.find((s) => (s.code || "").toLowerCase() === trackLang)
+              || data.subtitles.find((s) => (s.code || "").toLowerCase().startsWith(trackLang));
             if (match && match.url) subUrl = match.url;
           }
         }
@@ -330,6 +343,16 @@
         progStatus.textContent = "Hazır!";
         saveFileBtn.href = targetUrl;
         saveFileBtn.style.display = "block";
+        const iosVideo = document.getElementById("iosVideo");
+        const iosTrack = document.getElementById("iosTrack");
+        if (qualitySelect.value !== "audio" && targetUrl) {
+          iosVideo.src = targetUrl;
+          if (subUrl) iosTrack.src = subUrl;
+          else iosTrack.removeAttribute("src");
+          iosVideo.style.display = "block";
+        } else {
+          iosVideo.style.display = "none";
+        }
         if (subUrl) {
           saveSubBtn.href = subUrl;
           saveSubBtn.style.display = "block";
