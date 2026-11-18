@@ -492,8 +492,19 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
                 if full.startswith(stem) and os.path.splitext(fn)[1].lower() in (".srt", ".vtt"):
                     vtt_text = _srt_to_vtt_text(full)
                     if sub_langs:
-                        clean_sub_cues = _extract_clean_cues(full)
-                        sub_cues = [{"start_ms": s, "end_ms": e, "text": t} for s, e, t in clean_sub_cues]
+                        wanted_sub = sub_langs[0]
+                        if f".{wanted_sub}." in fn.lower():
+                            clean_sub_cues = _extract_clean_cues(full)
+                            sub_cues = [{"start_ms": s, "end_ms": e, "text": t} for s, e, t in clean_sub_cues]
+                        else:
+                            tr_sub_path, tr_sub_cues = _translate_srt_cues(full, wanted_sub, gemini_api_key=gemini_api_key)
+                            if tr_sub_cues:
+                                sub_cues = tr_sub_cues
+                                if tr_sub_path:
+                                    vtt_text = _srt_to_vtt_text(tr_sub_path)
+                            else:
+                                clean_sub_cues = _extract_clean_cues(full)
+                                sub_cues = [{"start_ms": s, "end_ms": e, "text": t} for s, e, t in clean_sub_cues]
                     if dub_langs:
                         translated, dub_cues = _translate_srt_cues(full, dub_langs[0], gemini_api_key=gemini_api_key)
                         if translated:

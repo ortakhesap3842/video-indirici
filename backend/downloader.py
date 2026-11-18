@@ -12,7 +12,7 @@ from fastapi import HTTPException
 import yt_dlp
 
 from backend.config import DEFAULT_DOWNLOAD_DIR
-from backend.dubbing import NEURAL_VOICES, apply_ai_dubbing
+from backend.dubbing import NEURAL_VOICES, apply_ai_dubbing, parse_subtitle_cues
 from backend.security import detect_platform
 from backend import storage
 from backend.universal import discover_embedded_media_url
@@ -103,6 +103,27 @@ def expand_subtitle_langs(lang_code: str) -> List[str]:
     if code == "zh":
         return ["zh-Hans"]
     return [code]
+
+
+def _write_clean_srt(sub_path: Path) -> Path:
+    try:
+        cues = parse_subtitle_cues(sub_path)
+        if not cues:
+            return sub_path
+        clean_srt = sub_path.with_suffix(".clean.srt")
+        blocks = []
+        for idx, (s_ms, e_ms, txt) in enumerate(cues, start=1):
+            def _fmt(ms: int) -> str:
+                ms = max(0, int(ms))
+                h, r = divmod(ms, 3600000)
+                m, r = divmod(r, 60000)
+                s, ml = divmod(r, 1000)
+                return f"{h:02d}:{m:02d}:{s:02d},{ml:03d}"
+            blocks.append(f"{idx}\n{_fmt(s_ms)} --> {_fmt(e_ms)}\n{txt}")
+        clean_srt.write_text("\n\n".join(blocks) + "\n", encoding="utf-8")
+        return clean_srt
+    except Exception:
+        return sub_path
 
 
 def run_download_job(
@@ -222,23 +243,24 @@ def run_download_job(
                     sub_candidate = p
                     break
             if sub_candidate is not None and ffmpeg_loc:
+                clean_sub_file = _write_clean_srt(sub_candidate)
                 if sub_langs and Path(filepath).suffix.lower() == ".mp4":
                     tmp_sub_mp4 = Path(filepath).with_name(f"{Path(filepath).stem}.subtmp.mp4")
-                    safe_sub_name = sub_candidate.name.replace("'", "\\'")
+                    safe_sub_name = clean_sub_file.name.replace("'", "\\'")
                     burn_res = subprocess.run(
                         [
                             ffmpeg_loc, "-y", "-i", str(filepath),
                             "-vf", f"subtitles='{safe_sub_name}'",
                             "-c:a", "copy", str(tmp_sub_mp4),
                         ],
-                        cwd=str(sub_candidate.parent),
+                        cwd=str(clean_sub_file.parent),
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300,
                     )
                     if burn_res.returncode != 0 or not tmp_sub_mp4.exists() or tmp_sub_mp4.stat().st_size == 0:
                         tmp_sub_mp4.unlink(missing_ok=True)
                         burn_res = subprocess.run(
                             [
-                                ffmpeg_loc, "-y", "-i", str(filepath), "-i", str(sub_candidate),
+                                ffmpeg_loc, "-y", "-i", str(filepath), "-i", str(clean_sub_file),
                                 "-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text", str(tmp_sub_mp4),
                             ],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180,
@@ -253,7 +275,10 @@ def run_download_job(
                         Path(filepath), sub_candidate, dub_code, ffmpeg_loc, gemini_api_key=gemini_api_key
                     )
                     if dubbed is not None:
+                        Path(filepath).unlink(missing_ok=True)
                         filepath = str(dubbed)
+                if clean_sub_file != sub_candidate:
+                    clean_sub_file.unlink(missing_ok=True)
                 if not sub_langs:
                     sub_candidate.unlink(missing_ok=True)
 
