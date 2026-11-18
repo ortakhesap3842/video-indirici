@@ -1,5 +1,7 @@
+import os
 import re
 import shutil
+import subprocess
 import threading
 import time
 import uuid
@@ -181,11 +183,27 @@ def run_download_job(
                 if str(p).startswith(stem) and p.suffix.lower() in (".srt", ".vtt"):
                     sub_candidate = p
                     break
-            if dub_code and sub_candidate is not None and ffmpeg_loc:
-                update_job(status="dubbing", percent=100.0, speed="", eta="")
-                dubbed = apply_ai_dubbing(Path(filepath), sub_candidate, dub_code, ffmpeg_loc)
-                if dubbed is not None:
-                    filepath = str(dubbed)
+            if sub_candidate is not None and ffmpeg_loc:
+                if sub_langs and Path(filepath).suffix.lower() == ".mp4":
+                    tmp_sub_mp4 = Path(filepath).with_name(f"{Path(filepath).stem}.subtmp.mp4")
+                    emb_res = subprocess.run(
+                        [
+                            ffmpeg_loc, "-y", "-i", str(filepath), "-i", str(sub_candidate),
+                            "-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text", str(tmp_sub_mp4),
+                        ],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180,
+                    )
+                    if emb_res.returncode == 0 and tmp_sub_mp4.exists() and tmp_sub_mp4.stat().st_size > 0:
+                        os.replace(tmp_sub_mp4, filepath)
+                    else:
+                        tmp_sub_mp4.unlink(missing_ok=True)
+                if dub_code:
+                    update_job(status="dubbing", percent=100.0, speed="", eta="")
+                    dubbed = apply_ai_dubbing(Path(filepath), sub_candidate, dub_code, ffmpeg_loc)
+                    if dubbed is not None:
+                        filepath = str(dubbed)
+                if not sub_langs:
+                    sub_candidate.unlink(missing_ok=True)
 
         filename = Path(filepath).name if filepath else title
         update_job(

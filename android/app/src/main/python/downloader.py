@@ -156,16 +156,42 @@ def _translate_srt_file(src_path, target_lang):
         text = open(src_path, "r", encoding="utf-8", errors="ignore").read()
         blocks = re.split(r"\r?\n\r?\n+", text)
         tl = "zh-CN" if target_lang == "zh" else target_lang
-        out_blocks = []
-        idx = 1
+        raw_cues = []
+        seen_last = ""
         for blk in blocks:
             lines = [ln.strip() for ln in blk.splitlines() if ln.strip()]
             ts_idx = next((i for i, ln in enumerate(lines) if "-->" in ln), -1)
             if ts_idx == -1:
                 continue
-            body = re.sub(r"<[^>]+>", "", " ".join(lines[ts_idx + 1 :])).strip()
-            if not body:
+            m = re.search(r"([\d:.,]+)\s*-->\s*([\d:.,]+)", lines[ts_idx])
+            if not m:
                 continue
+            body = re.sub(r"<[^>]+>", "", " ".join(lines[ts_idx + 1 :])).strip()
+            body = re.sub(r"\s+", " ", body)
+            if not body or body == seen_last:
+                continue
+            seen_last = body
+            raw_cues.append((m.group(1), m.group(2), body))
+
+        merged = []
+        cur_start = None
+        cur_end = ""
+        cur_parts = []
+        for st, en, txt in raw_cues:
+            if cur_start is None:
+                cur_start = st
+            cur_end = en
+            cur_parts.append(txt)
+            joined = " ".join(cur_parts)
+            if joined.endswith((".", "!", "?")) or len(joined) >= 220:
+                merged.append((cur_start, cur_end, joined))
+                cur_start = None
+                cur_parts = []
+        if cur_parts and cur_start is not None:
+            merged.append((cur_start, cur_end, " ".join(cur_parts)))
+
+        out_blocks = []
+        for idx, (st, en, body) in enumerate(merged, start=1):
             try:
                 q = urllib.parse.quote(body)
                 u = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={tl}&dt=t&q={q}"
@@ -175,8 +201,7 @@ def _translate_srt_file(src_path, target_lang):
                 tr = "".join(seg[0] for seg in (data[0] or []) if seg and seg[0]).strip() or body
             except Exception:
                 tr = body
-            out_blocks.append(f"{idx}\n{lines[ts_idx]}\n{tr}")
-            idx += 1
+            out_blocks.append(f"{idx}\n{st} --> {en}\n{tr}")
         if not out_blocks:
             return None
         dub_path = os.path.splitext(src_path)[0] + f".dub-{target_lang}.srt"
