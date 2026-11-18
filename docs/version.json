@@ -1,5 +1,5 @@
 {
-  "version": "1.4.7",
+  "version": "1.4.8",
   "download_url": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
   "downloads": {
     "windows": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
@@ -7,5 +7,5 @@
     "android": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.apk",
     "ios": "./app.html"
   },
-  "notes": "v1.4.7: İndirilen MP4 videoların içine kalıcı altyazı gömme (Android OpenGL SubtitleBurner + Masaüstü FFmpeg)."
+  "notes": "v1.4.8: YouTube kayan (rolling) altyazı tekrarı temizlendi; altyazı ve dublaj satırları aynı anda temiz değişiyor."
 }

@@ -161,17 +161,85 @@ def _ts_to_ms(ts_str):
     return int((h * 3600 + m * 60 + s) * 1000)
 
 
+def _ms_to_vtt_ts(ms):
+    ms = max(0, int(ms))
+    h, rem = divmod(ms, 3600000)
+    m, rem = divmod(rem, 60000)
+    s, millis = divmod(rem, 1000)
+    return f"{h:02d}:{m:02d}:{s:02d}.{millis:03d}"
+
+
+def _extract_clean_cues(src_path):
+    """Deduplicate YouTube rolling-window captions into clean non-overlapping blocks."""
+    raw = open(src_path, "r", encoding="utf-8", errors="ignore").read()
+    blocks = re.split(r"\r?\n\r?\n+", raw)
+    raw_cues = []
+    for blk in blocks:
+        lines = [ln.strip() for ln in blk.splitlines() if ln.strip()]
+        ts_idx = next((i for i, ln in enumerate(lines) if "-->" in ln), -1)
+        if ts_idx == -1:
+            continue
+        m = re.search(r"([\d:.,]+)\s*-->\s*([\d:.,]+)", lines[ts_idx])
+        if not m:
+            continue
+        st_ms = _ts_to_ms(m.group(1))
+        en_ms = _ts_to_ms(m.group(2))
+        if en_ms - st_ms < 120:
+            continue
+        cleaned_lines = []
+        for raw_ln in lines[ts_idx + 1 :]:
+            ln = re.sub(r"<[^>]+>", "", raw_ln)
+            ln = re.sub(r"\s+", " ", ln).strip()
+            if ln:
+                cleaned_lines.append(ln)
+        if cleaned_lines:
+            raw_cues.append((st_ms, en_ms, cleaned_lines))
+
+    deduped = []
+    prev_lines = []
+    for st_ms, en_ms, cur_lines in raw_cues:
+        if prev_lines and cur_lines[0] == prev_lines[-1]:
+            new_lines = cur_lines[1:]
+        elif prev_lines and cur_lines == prev_lines:
+            new_lines = []
+        else:
+            new_lines = cur_lines
+        prev_lines = cur_lines
+        joined = " ".join(new_lines).strip()
+        if not joined:
+            continue
+        if deduped and joined == deduped[-1][2]:
+            continue
+        deduped.append((st_ms, max(en_ms, st_ms + 700), joined))
+
+    for i in range(len(deduped) - 1):
+        s_ms, e_ms, txt = deduped[i]
+        next_s = deduped[i + 1][0]
+        if e_ms >= next_s:
+            deduped[i] = (s_ms, max(s_ms + 300, next_s - 40), txt)
+    return deduped
+
+
+def _cues_to_vtt_text(cues):
+    if not cues:
+        return ""
+    out = ["WEBVTT\n"]
+    for st_ms, en_ms, txt in cues:
+        out.append(f"{_ms_to_vtt_ts(st_ms)} --> {_ms_to_vtt_ts(en_ms)}\n{txt}\n")
+    return "\n".join(out)
+
+
 def _srt_to_vtt_text(sub_path):
     try:
+        clean = _extract_clean_cues(sub_path)
+        if clean:
+            return _cues_to_vtt_text(clean)
         raw = open(sub_path, "r", encoding="utf-8", errors="ignore").read()
         if raw.lstrip().startswith("WEBVTT"):
             return raw
         lines = ["WEBVTT\n"]
         for ln in raw.splitlines():
-            if "-->" in ln:
-                lines.append(ln.replace(",", "."))
-            else:
-                lines.append(ln)
+            lines.append(ln.replace(",", ".") if "-->" in ln else ln)
         return "\n".join(lines)
     except Exception:
         return ""
@@ -220,34 +288,17 @@ def _translate_batch_gemini(texts, target_lang, api_key):
 def _translate_srt_cues(src_path, target_lang, gemini_api_key=""):
     try:
         import urllib.parse
-        text = open(src_path, "r", encoding="utf-8", errors="ignore").read()
-        blocks = re.split(r"\r?\n\r?\n+", text)
         tl = "zh-CN" if target_lang == "zh" else target_lang
-        raw_cues = []
-        seen_last = ""
-        for blk in blocks:
-            lines = [ln.strip() for ln in blk.splitlines() if ln.strip()]
-            ts_idx = next((i for i, ln in enumerate(lines) if "-->" in ln), -1)
-            if ts_idx == -1:
-                continue
-            m = re.search(r"([\d:.,]+)\s*-->\s*([\d:.,]+)", lines[ts_idx])
-            if not m:
-                continue
-            body = re.sub(r"<[^>]+>", "", " ".join(lines[ts_idx + 1 :])).strip()
-            body = re.sub(r"\s+", " ", body)
-            if not body or body == seen_last:
-                continue
-            seen_last = body
-            raw_cues.append((m.group(1), m.group(2), body))
+        raw_cues = _extract_clean_cues(src_path)
 
         merged = []
         cur_start = None
-        cur_end = ""
+        cur_end = 0
         cur_parts = []
-        for st, en, txt in raw_cues:
+        for st_ms, en_ms, txt in raw_cues:
             if cur_start is None:
-                cur_start = st
-            cur_end = en
+                cur_start = st_ms
+            cur_end = en_ms
             cur_parts.append(txt)
             joined = " ".join(cur_parts)
             if joined.endswith((".", "!", "?")) or len(joined) >= 220:
@@ -273,7 +324,7 @@ def _translate_srt_cues(src_path, target_lang, gemini_api_key=""):
 
         out_blocks = []
         dub_cues = []
-        for idx, (st, en, body) in enumerate(limited_merged, start=1):
+        for idx, (st_ms, en_ms, body) in enumerate(limited_merged, start=1):
             if translated_list is not None:
                 tr = translated_list[idx - 1]
             else:
@@ -286,8 +337,8 @@ def _translate_srt_cues(src_path, target_lang, gemini_api_key=""):
                     tr = "".join(seg[0] for seg in (data[0] or []) if seg and seg[0]).strip() or body
                 except Exception:
                     tr = body
-            out_blocks.append(f"{idx}\n{st} --> {en}\n{tr}")
-            dub_cues.append({"start_ms": _ts_to_ms(st), "end_ms": _ts_to_ms(en), "text": tr})
+            out_blocks.append(f"{idx}\n{_ms_to_vtt_ts(st_ms)} --> {_ms_to_vtt_ts(en_ms)}\n{tr}")
+            dub_cues.append({"start_ms": st_ms, "end_ms": en_ms, "text": tr})
         if not out_blocks:
             return None, []
         dub_path = os.path.splitext(src_path)[0] + f".dub-{target_lang}.srt"
@@ -441,19 +492,8 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
                 if full.startswith(stem) and os.path.splitext(fn)[1].lower() in (".srt", ".vtt"):
                     vtt_text = _srt_to_vtt_text(full)
                     if sub_langs:
-                        try:
-                            raw_sub = open(full, "r", encoding="utf-8", errors="ignore").read()
-                            for blk in re.split(r"\r?\n\r?\n+", raw_sub):
-                                lns = [ln.strip() for ln in blk.splitlines() if ln.strip()]
-                                ti = next((i for i, ln in enumerate(lns) if "-->" in ln), -1)
-                                if ti == -1: continue
-                                mm = re.search(r"([\d:.,]+)\s*-->\s*([\d:.,]+)", lns[ti])
-                                if not mm: continue
-                                txt = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", " ".join(lns[ti + 1 :]))).strip()
-                                if txt:
-                                    sub_cues.append({"start_ms": _ts_to_ms(mm.group(1)), "end_ms": _ts_to_ms(mm.group(2)), "text": txt})
-                        except Exception:
-                            pass
+                        clean_sub_cues = _extract_clean_cues(full)
+                        sub_cues = [{"start_ms": s, "end_ms": e, "text": t} for s, e, t in clean_sub_cues]
                     if dub_langs:
                         translated, dub_cues = _translate_srt_cues(full, dub_langs[0], gemini_api_key=gemini_api_key)
                         if translated:

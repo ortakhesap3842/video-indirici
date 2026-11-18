@@ -58,6 +58,20 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(len(cues), 1)
             self.assertEqual(cues[0][2], "Hello world.")
 
+    def test_rolling_caption_deduplication(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "rolling.vtt"
+            p.write_text(
+                "WEBVTT\n\n"
+                "00:00:01.000 --> 00:00:02.500\nFirst line\nSecond line\n\n"
+                "00:00:02.500 --> 00:00:02.550\nSecond line\n\n"
+                "00:00:02.550 --> 00:00:04.000\nSecond line\nThird line.\n",
+                encoding="utf-8",
+            )
+            cues = parse_subtitle_cues(p)
+            self.assertEqual(len(cues), 1)
+            self.assertEqual(cues[0][2], "First line Second line Third line.")
+
     def test_version_parsing(self):
         self.assertGreater(parse_version("1.4.3"), parse_version("1.4.2"))
 

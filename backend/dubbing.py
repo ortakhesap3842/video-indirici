@@ -108,8 +108,7 @@ def _time_to_ms(ts: str) -> int:
 def parse_subtitle_cues(sub_path: Path) -> List[Tuple[int, int, str]]:
     text = sub_path.read_text(encoding="utf-8", errors="ignore")
     blocks = re.split(r"\r?\n\r?\n+", text)
-    cues: List[Tuple[int, int, str]] = []
-    seen_last = ""
+    raw_cues: List[Tuple[int, int, List[str]]] = []
 
     for blk in blocks:
         lines = [ln.strip() for ln in blk.splitlines() if ln.strip()]
@@ -124,15 +123,43 @@ def parse_subtitle_cues(sub_path: Path) -> List[Tuple[int, int, str]]:
             continue
         start_ms = _time_to_ms(m.group(1))
         end_ms = _time_to_ms(m.group(2))
-        body = " ".join(lines[ts_idx + 1 :])
-        body = re.sub(r"<[^>]+>", "", body)
-        body = re.sub(r"\s+", " ", body).strip()
-        if not body or body == seen_last:
+        if end_ms - start_ms < 120:
             continue
-        seen_last = body
-        cues.append((start_ms, max(end_ms, start_ms + 500), body))
+        cleaned_lines: List[str] = []
+        for raw_ln in lines[ts_idx + 1 :]:
+            ln = re.sub(r"<[^>]+>", "", raw_ln)
+            ln = re.sub(r"\s+", " ", ln).strip()
+            if ln:
+                cleaned_lines.append(ln)
+        if cleaned_lines:
+            raw_cues.append((start_ms, end_ms, cleaned_lines))
 
-    return merge_cues_into_sentences(cues)
+    # Remove YouTube rolling-caption overlap (where line[0] repeats previous cue's last line)
+    deduped: List[Tuple[int, int, str]] = []
+    prev_lines: List[str] = []
+    for start_ms, end_ms, cur_lines in raw_cues:
+        if prev_lines and cur_lines[0] == prev_lines[-1]:
+            new_lines = cur_lines[1:]
+        elif prev_lines and cur_lines == prev_lines:
+            new_lines = []
+        else:
+            new_lines = cur_lines
+        prev_lines = cur_lines
+        joined = " ".join(new_lines).strip()
+        if not joined:
+            continue
+        if deduped and joined == deduped[-1][2]:
+            continue
+        deduped.append((start_ms, max(end_ms, start_ms + 700), joined))
+
+    # Clamp end_ms so blocks never overlap and disappear/appear cleanly together
+    for i in range(len(deduped) - 1):
+        s_ms, e_ms, txt = deduped[i]
+        next_s = deduped[i + 1][0]
+        if e_ms >= next_s:
+            deduped[i] = (s_ms, max(s_ms + 300, next_s - 40), txt)
+
+    return merge_cues_into_sentences(deduped)
 
 
 def merge_cues_into_sentences(
