@@ -41,8 +41,9 @@ jobs:
           path: dist/VideoIndirici.exe
 
   build-macos:
+    needs: [test-backend]
     runs-on: macos-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -55,12 +56,12 @@ jobs:
       - run: |
           pyinstaller --noconfirm --windowed --icon "assets/icon.png" --name VideoIndirici --add-data "static:static" desktop.py
           cd dist && zip -r VideoIndirici-macOS.zip VideoIndirici.app
-      - uses: actions/upload-artifact@v4
+      - uses: softprops/action-gh-release@v2
         with:
-          name: macos-zip
-          path: dist/VideoIndirici-macOS.zip
+          files: dist/VideoIndirici-macOS.zip
 
   build-android:
+    needs: [test-backend]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -98,8 +99,7 @@ jobs:
           path: android/VideoIndirici.apk
 
   publish-release:
-    needs: [build-windows, build-macos, build-android]
-    if: always() && needs.build-windows.result == 'success' && needs.build-android.result == 'success'
+    needs: [build-windows, build-android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -110,6 +110,5 @@ jobs:
           fail_on_unmatched_files: false
           files: |
             artifacts/windows-exe/VideoIndirici.exe
-            artifacts/macos-zip/VideoIndirici-macOS.zip
             artifacts/android-apk/VideoIndirici.apk
           generate_release_notes: true
