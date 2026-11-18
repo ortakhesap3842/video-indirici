@@ -162,8 +162,9 @@ public class AndroidDubber {
                             for (Voice v : ttsHolder[0].getVoices()) {
                                 if (!v.getLocale().getLanguage().equalsIgnoreCase(loc.getLanguage())) continue;
                                 int score = v.getQuality();
-                                if (v.isNetworkConnectionRequired()) score += 150; // Prefer natural neural voices
+                                if (v.isNetworkConnectionRequired()) score += 150;
                                 String vName = v.getName().toLowerCase(Locale.US);
+                                if (vName.contains("neural") || vName.contains("wavenet") || vName.contains("network")) score += 180;
                                 boolean wantsFemale = speaker[2] > 0.5f;
                                 if (wantsFemale && (vName.contains("female") || vName.contains("-f-") || vName.contains("emel"))) score += 100;
                                 if (!wantsFemale && (vName.contains("male") || vName.contains("-m-") || vName.contains("ahmet"))) score += 100;

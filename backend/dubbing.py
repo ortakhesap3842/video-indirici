@@ -1,6 +1,7 @@
 import array
 import asyncio
 import json
+import os
 import re
 import subprocess
 import tempfile
@@ -159,6 +160,74 @@ def merge_cues_into_sentences(
     return merged
 
 
+def translate_batch_with_gemini(
+    texts: List[str], target_lang: str, api_key: str
+) -> Optional[List[str]]:
+    """Translate dialogue lines in batch using Gemini 2.5 Flash for natural spoken dubbing."""
+    if not api_key or not texts:
+        return None
+    lang_names = {
+        "tr": "Turkish", "en": "English", "de": "German", "ru": "Russian",
+        "zh": "Chinese (Simplified)", "es": "Spanish", "fr": "French",
+        "ar": "Arabic", "ja": "Japanese", "ko": "Korean", "it": "Italian", "pt": "Portuguese",
+    }
+    target_name = lang_names.get(target_lang.lower(), target_lang)
+    prompt = (
+        f"You are a professional film dubbing translator. Translate the following {len(texts)} "
+        f"video dialogue lines into natural, idiomatic, spoken {target_name}. "
+        f"Keep the exact same count ({len(texts)}) and order, preserve tone and meaning, "
+        f"and make them concise enough to be spoken naturally in dubbing. "
+        f"Return ONLY a valid JSON array of {len(texts)} translated strings.\n\n"
+        + json.dumps(texts, ensure_ascii=False)
+    )
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.3, "responseMimeType": "application/json"},
+    }
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.5-flash:generateContent?key={urllib.parse.quote(api_key.strip())}"
+    )
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        raw_txt = (
+            data.get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [{}])[0]
+            .get("text", "")
+        )
+        parsed = json.loads(raw_txt)
+        if isinstance(parsed, list) and len(parsed) == len(texts):
+            return [str(x).strip() or orig for x, orig in zip(parsed, texts)]
+    except Exception:
+        return None
+    return None
+
+
+def translate_cues_contextual(
+    texts: List[str], target_lang: str, gemini_api_key: str = ""
+) -> List[str]:
+    key = (gemini_api_key or os.environ.get("GEMINI_API_KEY", "")).strip()
+    if key:
+        results: List[str] = []
+        for i in range(0, len(texts), 20):
+            chunk = texts[i : i + 20]
+            gem = translate_batch_with_gemini(chunk, target_lang, key)
+            if gem:
+                results.extend(gem)
+            else:
+                results.extend(translate_text_contextual(t, target_lang) for t in chunk)
+        return results
+    return [translate_text_contextual(t, target_lang) for t in texts]
+
+
 def translate_text_contextual(text: str, target_lang: str) -> str:
     code = target_lang.strip().lower()
     tl = "zh-CN" if code == "zh" else code
@@ -197,7 +266,7 @@ async def _synth_edge_tts(
 
 
 def apply_ai_dubbing(
-    video_path: Path, sub_path: Path, dub_lang: str, ffmpeg_exe: str
+    video_path: Path, sub_path: Path, dub_lang: str, ffmpeg_exe: str, gemini_api_key: str = ""
 ) -> Optional[Path]:
     """Generate speaker-matched contextual neural TTS dubbing track and mux into the video."""
     lang = dub_lang.strip().lower()
@@ -210,11 +279,11 @@ def apply_ai_dubbing(
     if not cues:
         return None
 
-    translated_segments: List[Tuple[int, str]] = []
-    for start_ms, _end_ms, txt in cues[:80]:
-        tr_txt = translate_text_contextual(txt, lang)
-        if tr_txt:
-            translated_segments.append((start_ms, tr_txt))
+    limited = cues[:80]
+    translated_texts = translate_cues_contextual([c[2] for c in limited], lang, gemini_api_key)
+    translated_segments: List[Tuple[int, str]] = [
+        (c[0], tr_txt) for c, tr_txt in zip(limited, translated_texts) if tr_txt
+    ]
 
     if not translated_segments:
         return None

@@ -528,6 +528,10 @@
         </div>
         <button id="downloadBtn" type="button">İndir</button>
       </div>
+      <details style="margin-top:4px; font-size:12px; color:var(--muted);">
+        <summary style="cursor:pointer; user-select:none;">Gemini AI Çeviri Anahtarı (İsteğe Bağlı — Daha Doğal Dublaj)</summary>
+        <input id="geminiKeyInput" type="password" placeholder="AIza... (Boş bırakılırsa standart çeviri kullanılır)" style="margin-top:8px; width:100%; padding:8px 10px; border-radius:9px; border:1px solid var(--border); background:rgba(5,8,17,0.8); color:var(--text);" />
+      </details>
 
       <div id="previewBox" class="preview">
         <div style="display:flex; gap:14px; align-items:center;">
@@ -589,6 +593,9 @@
     VideoIndiriciUI.populateLanguageSelect(ccSelect, "Altyazı Yok");
     const dubSelect = document.getElementById("dubSelect");
     VideoIndiriciUI.populateLanguageSelect(dubSelect, "Dublaj Yok");
+    const geminiKeyInput = document.getElementById("geminiKeyInput");
+    geminiKeyInput.value = localStorage.getItem("vi_gemini_key") || "";
+    geminiKeyInput.addEventListener("change", () => localStorage.setItem("vi_gemini_key", geminiKeyInput.value.trim()));
     const previewBox = document.getElementById("previewBox");
     const searchResults = document.getElementById("searchResults");
     const thumbImg = document.getElementById("thumbImg");
@@ -879,7 +886,7 @@
         const res = await fetch("/api/download", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url, quality: qualitySelect.value, subtitle_lang: ccSelect.value, dub_lang: dubSelect.value }),
+          body: JSON.stringify({ url, quality: qualitySelect.value, subtitle_lang: ccSelect.value, dub_lang: dubSelect.value, gemini_api_key: geminiKeyInput.value.trim() }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "İndirme başlatılamadı.");

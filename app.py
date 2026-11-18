@@ -48,6 +48,7 @@ class DownloadRequest(BaseModel):
     quality: str = "best"  # best, 1080, 720, 480, audio
     subtitle_lang: str = ""
     dub_lang: str = ""
+    gemini_api_key: str = ""
 
 
 class ApplyUpdateRequest(BaseModel):
@@ -163,7 +164,7 @@ def get_video_info(req: InfoRequest, request: Request) -> JSONResponse:
 def start_download(req: DownloadRequest, request: Request) -> JSONResponse:
     require_action_access(request)
     url = validate_url(req.url)
-    job_id = create_download_job(url, req.quality, req.subtitle_lang, req.dub_lang)
+    job_id = create_download_job(url, req.quality, req.subtitle_lang, req.dub_lang, req.gemini_api_key)
     return JSONResponse({"job_id": job_id})
 
 

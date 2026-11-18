@@ -95,7 +95,7 @@ def expand_subtitle_langs(lang_code: str) -> List[str]:
 
 
 def run_download_job(
-    job_id: str, url: str, quality: str, subtitle_lang: str = "", dub_lang: str = ""
+    job_id: str, url: str, quality: str, subtitle_lang: str = "", dub_lang: str = "", gemini_api_key: str = ""
 ) -> None:
     def update_job(**kwargs: Any) -> None:
         with jobs_lock:
@@ -218,7 +218,9 @@ def run_download_job(
                         tmp_sub_mp4.unlink(missing_ok=True)
                 if dub_code:
                     update_job(status="dubbing", percent=100.0, speed="", eta="")
-                    dubbed = apply_ai_dubbing(Path(filepath), sub_candidate, dub_code, ffmpeg_loc)
+                    dubbed = apply_ai_dubbing(
+                        Path(filepath), sub_candidate, dub_code, ffmpeg_loc, gemini_api_key=gemini_api_key
+                    )
                     if dubbed is not None:
                         filepath = str(dubbed)
                 if not sub_langs:
@@ -310,7 +312,9 @@ def extract_video_info(url: str) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"Video bilgileri alınamadı: {strip_ansi(str(exc))}")
 
 
-def create_download_job(url: str, quality: str, subtitle_lang: str = "", dub_lang: str = "") -> str:
+def create_download_job(
+    url: str, quality: str, subtitle_lang: str = "", dub_lang: str = "", gemini_api_key: str = ""
+) -> str:
     clean_quality = quality if quality in ("best", "1080", "720", "480", "audio") else "best"
     clean_sub = subtitle_lang.strip().lower() if expand_subtitle_langs(subtitle_lang) else ""
     clean_dub = dub_lang.strip().lower() if dub_lang and dub_lang.strip().lower() in NEURAL_VOICES else ""
@@ -339,7 +343,9 @@ def create_download_job(url: str, quality: str, subtitle_lang: str = "", dub_lan
         }
 
     thread = threading.Thread(
-        target=run_download_job, args=(job_id, url, clean_quality, clean_sub, clean_dub), daemon=True
+        target=run_download_job,
+        args=(job_id, url, clean_quality, clean_sub, clean_dub, (gemini_api_key or "").strip()),
+        daemon=True,
     )
     thread.start()
     return job_id

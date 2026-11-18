@@ -98,7 +98,7 @@
       <div class="badges">
         <span class="badge yt">YouTube</span>
         <span class="badge ig">Instagram</span>
-        <span class="badge ok">Bağımsız • v1.4.4</span>
+        <span class="badge ok">Bağımsız • v1.4.5</span>
       </div>
       <h1>Video İndirici</h1>
       <p class="sub">Bilgisayara gerek duymadan doğrudan telefonunuza indirin.</p>
@@ -130,6 +130,10 @@
         <button id="searchBtn" class="sec" type="button">Ara / Önizle</button>
         <button id="dlBtn" type="button">İndir</button>
       </div>
+      <details style="font-size:12px; color:var(--muted);">
+        <summary style="cursor:pointer;">Gemini AI Çeviri Anahtarı (İsteğe Bağlı)</summary>
+        <input id="geminiKeyInput" type="password" placeholder="AIza... (Doğal AI çevirisi için isteğe bağlı)" style="margin-top:8px;" />
+      </details>
 
       <div id="previewBox" class="preview">
         <img id="thumbImg" src="" alt="" />
@@ -165,6 +169,9 @@
     VideoIndiriciUI.populateLanguageSelect(ccSelect, "CC: Yok");
     const dubSelect = document.getElementById("dubSelect");
     VideoIndiriciUI.populateLanguageSelect(dubSelect, "Dublaj: Yok");
+    const geminiKeyInput = document.getElementById("geminiKeyInput");
+    geminiKeyInput.value = localStorage.getItem("vi_gemini_key") || "";
+    geminiKeyInput.addEventListener("change", () => localStorage.setItem("vi_gemini_key", geminiKeyInput.value.trim()));
     const searchBtn = document.getElementById("searchBtn");
     const dlBtn = document.getElementById("dlBtn");
     const previewBox = document.getElementById("previewBox");
@@ -212,7 +219,9 @@
       progLabel.textContent = "İndirme başlatılıyor...";
       statusMsg.className = "msg";
       statusMsg.textContent = "";
-      if (AndroidApp.downloadWithOptions) {
+      if (AndroidApp.downloadWithAiOptions) {
+        AndroidApp.downloadWithAiOptions(val, qualitySelect.value, ccSelect.value || "", dubSelect.value || "", geminiKeyInput.value.trim());
+      } else if (AndroidApp.downloadWithOptions) {
         AndroidApp.downloadWithOptions(val, qualitySelect.value, ccSelect.value || "", dubSelect.value || "");
       } else if (AndroidApp.downloadWithSubtitle) {
         AndroidApp.downloadWithSubtitle(val, qualitySelect.value, ccSelect.value || "");
@@ -304,7 +313,7 @@
     searchBtn.addEventListener("click", runSearchOrInfo);
     dlBtn.addEventListener("click", () => startDl());
 
-    const CURRENT_VER = "1.4.4";
+    const CURRENT_VER = "1.4.5";
     let updateBusy = false;
 
     window.onUpdateProgress = (pct, text) => {

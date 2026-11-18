@@ -177,7 +177,47 @@ def _srt_to_vtt_text(sub_path):
         return ""
 
 
-def _translate_srt_cues(src_path, target_lang):
+def _translate_batch_gemini(texts, target_lang, api_key):
+    if not api_key or not texts:
+        return None
+    import urllib.parse
+    lang_names = {
+        "tr": "Turkish", "en": "English", "de": "German", "ru": "Russian",
+        "zh": "Chinese (Simplified)", "es": "Spanish", "fr": "French",
+        "ar": "Arabic", "ja": "Japanese", "ko": "Korean", "it": "Italian", "pt": "Portuguese",
+    }
+    tname = lang_names.get(target_lang.lower(), target_lang)
+    prompt = (
+        f"You are a professional film dubbing translator. Translate these {len(texts)} dialogue lines "
+        f"into natural, idiomatic, spoken {tname} for voice-over dubbing. "
+        f"Return ONLY a valid JSON array of {len(texts)} strings.\n\n"
+        + json.dumps(texts, ensure_ascii=False)
+    )
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.3, "responseMimeType": "application/json"},
+    }
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.5-flash:generateContent?key={urllib.parse.quote(api_key.strip())}"
+    )
+    try:
+        req = urllib.request.Request(
+            url, data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        raw_txt = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        parsed = json.loads(raw_txt)
+        if isinstance(parsed, list) and len(parsed) == len(texts):
+            return [str(x).strip() or orig for x, orig in zip(parsed, texts)]
+    except Exception:
+        return None
+    return None
+
+
+def _translate_srt_cues(src_path, target_lang, gemini_api_key=""):
     try:
         import urllib.parse
         text = open(src_path, "r", encoding="utf-8", errors="ignore").read()
@@ -217,18 +257,35 @@ def _translate_srt_cues(src_path, target_lang):
         if cur_parts and cur_start is not None:
             merged.append((cur_start, cur_end, " ".join(cur_parts)))
 
+        limited_merged = merged[:60]
+        raw_texts = [b for _, _, b in limited_merged]
+        translated_list = None
+        if gemini_api_key:
+            translated_list = []
+            for i in range(0, len(raw_texts), 20):
+                chunk = raw_texts[i : i + 20]
+                gem = _translate_batch_gemini(chunk, target_lang, gemini_api_key)
+                if gem:
+                    translated_list.extend(gem)
+                else:
+                    translated_list = None
+                    break
+
         out_blocks = []
         dub_cues = []
-        for idx, (st, en, body) in enumerate(merged[:60], start=1):
-            try:
-                q = urllib.parse.quote(body)
-                u = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={tl}&dt=t&q={q}"
-                req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
-                with urllib.request.urlopen(req, timeout=6) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
-                tr = "".join(seg[0] for seg in (data[0] or []) if seg and seg[0]).strip() or body
-            except Exception:
-                tr = body
+        for idx, (st, en, body) in enumerate(limited_merged, start=1):
+            if translated_list is not None:
+                tr = translated_list[idx - 1]
+            else:
+                try:
+                    q = urllib.parse.quote(body)
+                    u = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={tl}&dt=t&q={q}"
+                    req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
+                    with urllib.request.urlopen(req, timeout=6) as resp:
+                        data = json.loads(resp.read().decode("utf-8"))
+                    tr = "".join(seg[0] for seg in (data[0] or []) if seg and seg[0]).strip() or body
+                except Exception:
+                    tr = body
             out_blocks.append(f"{idx}\n{st} --> {en}\n{tr}")
             dub_cues.append({"start_ms": _ts_to_ms(st), "text": tr})
         if not out_blocks:
@@ -241,7 +298,7 @@ def _translate_srt_cues(src_path, target_lang):
         return None, []
 
 
-def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="", dub_lang=""):
+def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="", dub_lang="", gemini_api_key=""):
     try:
         clean_url = _validate_url(url)
         if not clean_url:
@@ -354,7 +411,7 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
                 if full.startswith(stem) and os.path.splitext(fn)[1].lower() in (".srt", ".vtt"):
                     vtt_text = _srt_to_vtt_text(full)
                     if dub_langs:
-                        translated, dub_cues = _translate_srt_cues(full, dub_langs[0])
+                        translated, dub_cues = _translate_srt_cues(full, dub_langs[0], gemini_api_key=gemini_api_key)
                         if translated:
                             if not sub_langs:
                                 vtt_text = _srt_to_vtt_text(translated)
