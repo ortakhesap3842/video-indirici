@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from backend.config import CLOUD_MODE, DEFAULT_DOWNLOAD_DIR, STATIC_DIR
+from backend.config import DEFAULT_DOWNLOAD_DIR, STATIC_DIR
 from backend.downloader import (
     create_download_job,
     extract_video_info,
@@ -65,13 +65,13 @@ def read_phone_page(request: Request, token: Optional[str] = None) -> FileRespon
 
 @app.get("/health")
 def health_check() -> JSONResponse:
-    return JSONResponse({"ok": True, "version": APP_VERSION, "cloud_mode": CLOUD_MODE})
+    return JSONResponse({"ok": True, "version": APP_VERSION, "local_mode": True})
 
 
 @app.get("/api/ping")
-def api_ping(request: Request, token: Optional[str] = None) -> JSONResponse:
-    require_action_access(request, token)
-    return JSONResponse({"ok": True, "version": APP_VERSION, "cloud_mode": CLOUD_MODE})
+def api_ping(request: Request) -> JSONResponse:
+    require_local(request)
+    return JSONResponse({"ok": True, "version": APP_VERSION, "local_mode": True})
 
 
 @app.get("/api/security-status")
@@ -166,9 +166,7 @@ def start_download(req: DownloadRequest, request: Request) -> JSONResponse:
 
 
 @app.get("/api/status/{job_id}")
-def get_status(job_id: str, request: Request, token: Optional[str] = None) -> JSONResponse:
-    if CLOUD_MODE:
-        require_phone_or_local(request, token)
+def get_status(job_id: str) -> JSONResponse:
     return JSONResponse(get_job_status(job_id))
 
 

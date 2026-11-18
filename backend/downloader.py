@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 import yt_dlp
 
-from backend.config import CLOUD_MODE, DEFAULT_DOWNLOAD_DIR
+from backend.config import DEFAULT_DOWNLOAD_DIR
 from backend.security import detect_platform
 
 jobs: Dict[str, Dict[str, Any]] = {}
@@ -81,21 +81,7 @@ def build_format_selector(quality: str) -> Dict[str, Any]:
     }
 
 
-def _cleanup_old_cloud_files() -> None:
-    if not CLOUD_MODE or not DEFAULT_DOWNLOAD_DIR.exists():
-        return
-    cutoff = time.time() - 7200
-    for entry in DEFAULT_DOWNLOAD_DIR.iterdir():
-        try:
-            if entry.is_file() and entry.stat().st_mtime < cutoff:
-                entry.unlink()
-        except Exception:
-            pass
-
-
 def run_download_job(job_id: str, url: str, quality: str) -> None:
-    _cleanup_old_cloud_files()
-
     def update_job(**kwargs: Any) -> None:
         with jobs_lock:
             if job_id in jobs:

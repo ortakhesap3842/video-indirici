@@ -8,12 +8,7 @@ from typing import Any, Dict, Optional
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from backend.config import (
-    CLOUD_ACCESS_KEY,
-    CLOUD_ALLOWED_ORIGINS,
-    CLOUD_MODE,
-    PHONE_TOKEN,
-)
+from backend.config import PHONE_TOKEN
 
 FAILED_TOKEN_ATTEMPTS: Dict[str, list] = {}
 FAILED_LOCK = threading.Lock()
@@ -43,10 +38,6 @@ WAF_SIGNATURES = (
 
 
 def _get_client_ip(request: Request) -> str:
-    if CLOUD_MODE:
-        xff = request.headers.get("x-forwarded-for", "").strip()
-        if xff:
-            return xff.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
 
@@ -99,12 +90,8 @@ def _is_allowed_origin(origin: Optional[str], request_host: Optional[str] = None
     parsed_orig = urllib.parse.urlparse(origin)
     if parsed_orig.hostname in ("127.0.0.1", "localhost"):
         return True
-    if CLOUD_MODE:
-        base_orig = f"{parsed_orig.scheme}://{parsed_orig.netloc}"
-        if base_orig in CLOUD_ALLOWED_ORIGINS:
-            return True
-        if request_host and parsed_orig.netloc == request_host:
-            return True
+    if request_host and parsed_orig.netloc == request_host:
+        return True
     return False
 
 
@@ -157,18 +144,6 @@ async def waf_security_middleware(request: Request, call_next: Any) -> Any:
         _record_waf_event(client_ip, sig_hit, path, strike=True)
         return JSONResponse({"detail": "Zararlı istek güvenlik duvarı tarafından engellendi."}, status_code=403)
 
-    if CLOUD_MODE and request.method == "OPTIONS":
-        if not _is_allowed_origin(origin, req_host):
-            _record_waf_event(client_ip, "Yetkisiz CORS Origin", path, strike=False)
-            return JSONResponse({"detail": "Geçersiz Origin."}, status_code=403)
-        preflight = JSONResponse({}, status_code=204)
-        if origin:
-            preflight.headers["Access-Control-Allow-Origin"] = origin
-            preflight.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-            preflight.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Access-Key"
-            preflight.headers["Access-Control-Max-Age"] = "600"
-        return preflight
-
     if request.method in ("POST", "PUT", "DELETE", "PATCH"):
         if not _is_allowed_origin(origin, req_host):
             _record_waf_event(client_ip, "CSRF / Harici Origin engellendi", path, strike=True)
@@ -183,17 +158,12 @@ async def waf_security_middleware(request: Request, call_next: Any) -> Any:
             return JSONResponse({"detail": "Zararlı veri güvenlik duvarı tarafından engellendi."}, status_code=403)
 
     response = await call_next(request)
-    if CLOUD_MODE and origin and _is_allowed_origin(origin, req_host):
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Access-Key"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     response.headers["X-WAF-Protected"] = "VideoIndirici-Firewall/1.0"
-    if CLOUD_MODE:
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     if path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     return response
@@ -214,8 +184,6 @@ def get_waf_status() -> Dict[str, Any]:
 
 
 def is_local_client(request: Request) -> bool:
-    if CLOUD_MODE:
-        return False
     host = request.client.host if request.client else ""
     return host in ("127.0.0.1", "::1", "localhost", "testclient")
 
@@ -248,22 +216,15 @@ def require_phone_or_local(request: Request, token: Optional[str] = None) -> Non
     client_ip = _get_client_ip(request)
     _check_rate_limit(client_ip)
 
-    header_key = request.headers.get("x-access-key")
-    candidate = token or header_key
-    if CLOUD_MODE and candidate and secrets.compare_digest(candidate, CLOUD_ACCESS_KEY):
-        return
-    if not CLOUD_MODE and candidate and secrets.compare_digest(candidate, PHONE_TOKEN):
+    if token and secrets.compare_digest(token, PHONE_TOKEN):
         return
 
     _record_failed_attempt(client_ip)
-    raise HTTPException(status_code=403, detail="Yetkisiz erişim. Geçerli erişim anahtarı gerekli.")
+    raise HTTPException(status_code=403, detail="Yetkisiz erişim. Lütfen QR kodu tekrar okutun.")
 
 
 def require_action_access(request: Request, token: Optional[str] = None) -> None:
-    if CLOUD_MODE:
-        require_phone_or_local(request, token)
-    else:
-        require_local(request)
+    require_local(request)
 
 
 def _host_matches(host: str, domain: str) -> bool:

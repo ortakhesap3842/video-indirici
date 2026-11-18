@@ -1,4 +1,3 @@
-import os
 import secrets
 import sys
 from pathlib import Path
@@ -13,14 +12,6 @@ DEFAULT_DOWNLOAD_DIR = Path.home() / "Downloads" / "VideoIndirici"
 DEFAULT_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 PHONE_TOKEN = secrets.token_urlsafe(24)
-CLOUD_ACCESS_KEY = os.environ.get("CLOUD_ACCESS_KEY", "").strip()
-CLOUD_MODE = bool(CLOUD_ACCESS_KEY)
-
-CLOUD_ALLOWED_ORIGINS = {
-    "https://ortakhesap3842.github.io",
-    "http://localhost",
-    "http://127.0.0.1",
-}
 
 ALLOWED_DOMAINS = (
     "youtube.com",

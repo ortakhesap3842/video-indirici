@@ -41,7 +41,6 @@
       background: rgba(255,255,255,0.07); border: 1px solid var(--border); color: var(--muted);
     }
     .badge.ok { color: #a7f3d0; border-color: rgba(52,211,153,0.35); background: rgba(16,185,129,0.12); }
-    .badge.warn { color: #fde68a; border-color: rgba(245,158,11,0.35); background: rgba(245,158,11,0.12); }
     h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
     .sub { font-size: 13px; color: var(--muted); margin-top: 3px; }
     .card {
@@ -79,45 +78,19 @@
     .res-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
     .info-card { display: none; gap: 10px; align-items: center; }
     .info-card img { width: 96px; height: 54px; object-fit: cover; border-radius: 9px; flex-shrink: 0; }
-    label { font-size: 12px; color: var(--muted); font-weight: 600; }
-    .hint { font-size: 12px; color: var(--muted); line-height: 1.5; }
-    .hint a { color: #a5b4fc; }
-    .footer-links { display: flex; justify-content: space-between; align-items: center; padding: 2px 4px; }
-    .footer-links a, .footer-links button { background: none; border: none; color: #a5b4fc; font-size: 12.5px; font-weight: 600; padding: 4px; text-decoration: none; cursor: pointer; }
+    .footer-links { display: flex; justify-content: center; align-items: center; padding: 4px; }
+    .footer-links a { color: #a5b4fc; font-size: 12.5px; font-weight: 600; text-decoration: none; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="header">
       <div class="badges">
-        <span class="badge">YouTube & Instagram</span>
-        <span class="badge">iOS • v1.3.7</span>
-        <span id="connBadge" class="badge warn">Sunucu Ayarlanmadı</span>
+        <span class="badge">YouTube & Medya</span>
+        <span class="badge ok">Yerel & Bağımsız • v1.3.7</span>
       </div>
       <h1>Video İndirici</h1>
-      <p class="sub">Bilgisayar kapalıyken bile iPhone'unuza video indirin.</p>
-    </div>
-
-    <div id="setupCard" class="card">
-      <div class="row" style="justify-content:space-between;">
-        <strong style="font-size:14px;">Bulut Sunucu Bağlantısı</strong>
-        <button id="closeSetupBtn" type="button" class="btn-secondary btn-sm" style="display:none;">Gizle</button>
-      </div>
-      <div>
-        <label for="serverUrl">Sunucu Adresi (HTTPS)</label>
-        <input id="serverUrl" type="url" placeholder="Örn: https://video-indirici-server.onrender.com" autocomplete="off" autocapitalize="none" />
-      </div>
-      <div>
-        <label for="accessKey">Erişim Anahtarı (CLOUD_ACCESS_KEY)</label>
-        <input id="accessKey" type="password" placeholder="Bulut sunucunuzdaki gizli anahtar" autocomplete="off" />
-      </div>
-      <button id="saveConnBtn" type="button" class="btn-primary">Bağlan ve Kaydet</button>
-      <p id="connMsg" class="msg" style="display:none;"></p>
-      <p class="hint">
-        Kişisel bulut sunucunuz henüz yoksa ücretsiz oluşturabilirsiniz:
-        <a href="https://render.com/deploy?repo=https://github.com/ortakhesap3842/video-indirici" target="_blank" rel="noopener">Render'da Tek Tıkla Sunucu Kur →</a>
-        <br />Kurulum bitince Render'daki <strong>Environment → CLOUD_ACCESS_KEY</strong> değerini ve sunucu adresini buraya bir kez girmeniz yeterlidir.
-      </p>
+      <p class="sub">Access Key veya sunucu kurulumu olmadan doğrudan cihazınızda indirin.</p>
     </div>
 
     <div class="card">
@@ -128,7 +101,7 @@
           <option value="1080">1080p MP4</option>
           <option value="720">720p MP4</option>
           <option value="480">480p MP4</option>
-          <option value="audio">Sadece Ses (MP3)</option>
+          <option value="audio">Sadece Ses (M4A)</option>
         </select>
         <button id="searchBtn" type="button" class="btn-secondary">Ara</button>
         <button id="dlBtn" type="button" class="btn-primary">İndir</button>
@@ -156,8 +129,7 @@
     <div id="resultsCard" class="card results"></div>
 
     <div class="footer-links">
-      <a href="./index.html">← İndirme Sayfası</a>
-      <button id="toggleSetupBtn" type="button">⚙ Sunucu Ayarları</button>
+      <a href="./index.html">← İndirme Sayfasına Dön</a>
     </div>
   </div>
 
@@ -166,14 +138,12 @@
       navigator.serviceWorker.register("./sw.js").catch(() => {});
     }
 
-    const setupCard = document.getElementById("setupCard");
-    const closeSetupBtn = document.getElementById("closeSetupBtn");
-    const toggleSetupBtn = document.getElementById("toggleSetupBtn");
-    const connBadge = document.getElementById("connBadge");
-    const serverUrlInput = document.getElementById("serverUrl");
-    const accessKeyInput = document.getElementById("accessKey");
-    const saveConnBtn = document.getElementById("saveConnBtn");
-    const connMsg = document.getElementById("connMsg");
+    const RESOLVER_NODES = [
+      "https://pipedapi.kavin.rocks",
+      "https://pipedapi.adminforge.de",
+      "https://pipedapi.r4fo.com",
+      "https://api.piped.private.coffee"
+    ];
 
     const qInput = document.getElementById("qInput");
     const qualitySelect = document.getElementById("qualitySelect");
@@ -191,97 +161,29 @@
     const saveFileBtn = document.getElementById("saveFileBtn");
     const resultsCard = document.getElementById("resultsCard");
 
-    let pollTimer = null;
-
-    function getServerConfig() {
-      return {
-        url: (localStorage.getItem("vi_cloud_url") || "").trim().replace(/\/+$/, ""),
-        key: (localStorage.getItem("vi_cloud_key") || "").trim()
-      };
-    }
-
-    function refreshConnUi(connected) {
-      const cfg = getServerConfig();
-      if (cfg.url) serverUrlInput.value = cfg.url;
-      if (cfg.key) accessKeyInput.value = cfg.key;
-      if (cfg.url && cfg.key) {
-        connBadge.textContent = connected ? "Buluta Bağlı" : "Kayıtlı Sunucu";
-        connBadge.className = "badge ok";
-        closeSetupBtn.style.display = "inline-block";
-        if (connected) setupCard.style.display = "none";
-      } else {
-        connBadge.textContent = "Sunucu Ayarlanmadı";
-        connBadge.className = "badge warn";
-        setupCard.style.display = "flex";
-      }
-    }
-
-    function fmtDur(sec) {
-      return VideoIndiriciUI.formatDuration(sec);
-    }
-
-    async function apiFetch(path, options = {}) {
-      const cfg = getServerConfig();
-      if (!cfg.url || !cfg.key) {
-        setupCard.style.display = "flex";
-        throw new Error("Önce Bulut Sunucu Adresi ve Erişim Anahtarını kaydedin.");
-      }
-      const headers = Object.assign({}, options.headers || {}, {
-        "X-Access-Key": cfg.key
-      });
-      if (options.body && !headers["Content-Type"]) {
-        headers["Content-Type"] = "application/json";
-      }
-      const resp = await fetch(`${cfg.url}${path}`, Object.assign({}, options, { headers }));
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        throw new Error(data.detail || `Sunucu hatası (${resp.status})`);
-      }
-      return data;
-    }
-
-    saveConnBtn.addEventListener("click", async () => {
-      const url = serverUrlInput.value.trim().replace(/\/+$/, "");
-      const key = accessKeyInput.value.trim();
-      connMsg.style.display = "block";
-      if (!url.startsWith("https://") && !url.startsWith("http://")) {
-        connMsg.className = "msg err";
-        connMsg.textContent = "Geçerli bir https:// sunucu adresi girin.";
-        return;
-      }
-      if (!key) {
-        connMsg.className = "msg err";
-        connMsg.textContent = "Erişim anahtarını girin.";
-        return;
-      }
-      connMsg.className = "msg";
-      connMsg.textContent = "Sunucuya bağlanılıyor...";
-      saveConnBtn.disabled = true;
+    function extractYoutubeId(url) {
       try {
-        const resp = await fetch(`${url}/api/ping`, { headers: { "X-Access-Key": key } });
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok || !data.ok) {
-          throw new Error(data.detail || "Bağlantı reddedildi. Anahtarı kontrol edin.");
-        }
-        localStorage.setItem("vi_cloud_url", url);
-        localStorage.setItem("vi_cloud_key", key);
-        connMsg.className = "msg ok";
-        connMsg.textContent = `Bağlantı başarılı! (Sunucu v${data.version || ""})`;
-        refreshConnUi(true);
-      } catch (err) {
-        connMsg.className = "msg err";
-        connMsg.textContent = err.message || "Sunucuya bağlanılamadı.";
-      } finally {
-        saveConnBtn.disabled = false;
-      }
-    });
+        const u = new URL(url);
+        if (u.hostname.includes("youtu.be")) return u.pathname.replace("/", "").slice(0, 11);
+        if (u.searchParams.get("v")) return u.searchParams.get("v").slice(0, 11);
+        const m = u.pathname.match(/\/(?:shorts|embed|live)\/([A-Za-z0-9_-]{11})/);
+        if (m) return m[1];
+      } catch (e) {}
+      return null;
+    }
 
-    toggleSetupBtn.addEventListener("click", () => {
-      setupCard.style.display = setupCard.style.display === "none" ? "flex" : "none";
-    });
-    closeSetupBtn.addEventListener("click", () => {
-      setupCard.style.display = "none";
-    });
+    async function fetchFromNodes(path) {
+      let lastErr = null;
+      for (const base of RESOLVER_NODES) {
+        try {
+          const r = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(7000) });
+          if (r.ok) return await r.json();
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr || new Error("Video kaynağı çözümlenemedi.");
+    }
 
     async function runSearchOrInfo() {
       const val = qInput.value.trim();
@@ -291,29 +193,39 @@
       infoCard.style.display = "none";
       progWrap.style.display = "flex";
       saveFileBtn.style.display = "none";
-      progStatus.textContent = val.startsWith("http") ? "Video bilgileri alınıyor..." : "YouTube'da aranıyor...";
+      progStatus.textContent = VideoIndiriciUI.isHttpUrl(val) ? "Video bilgileri alınıyor..." : "YouTube'da aranıyor...";
       progPct.textContent = "";
       progFill.style.width = "35%";
+      statusMsg.className = "msg";
       statusMsg.textContent = "";
 
       try {
-        if (val.startsWith("http://") || val.startsWith("https://")) {
-          const data = await apiFetch("/api/info", {
-            method: "POST",
-            body: JSON.stringify({ url: val })
-          });
+        if (VideoIndiriciUI.isHttpUrl(val)) {
+          const vidId = extractYoutubeId(val);
+          if (!vidId) {
+            progWrap.style.display = "none";
+            infoThumb.src = "";
+            infoTitle.textContent = "Doğrudan Medya Bağlantısı";
+            infoMeta.textContent = val;
+            infoCard.style.display = "flex";
+            return;
+          }
+          const data = await fetchFromNodes(`/streams/${encodeURIComponent(vidId)}`);
           progWrap.style.display = "none";
-          infoThumb.src = data.thumbnail || "";
+          infoThumb.src = data.thumbnailUrl || "";
           infoTitle.textContent = data.title || "Video";
-          infoMeta.textContent = `${data.platform || ""} • ${data.uploader || ""} • ${fmtDur(data.duration)}`;
+          infoMeta.textContent = `YouTube • ${data.uploader || ""} • ${VideoIndiriciUI.formatDuration(data.duration)}`;
           infoCard.style.display = "flex";
         } else {
-          const data = await apiFetch("/api/search", {
-            method: "POST",
-            body: JSON.stringify({ query: val, limit: 15 })
-          });
+          const data = await fetchFromNodes(`/search?q=${encodeURIComponent(val)}&filter=videos`);
           progWrap.style.display = "none";
-          const items = data.results || [];
+          const items = (data.items || []).filter((x) => x.type === "stream").slice(0, 15).map((x) => ({
+            title: x.title,
+            url: `https://www.youtube.com${x.url}`,
+            uploader: x.uploaderName || "YouTube",
+            duration: x.duration || 0,
+            thumbnail: x.thumbnail || ""
+          }));
           if (!items.length) {
             statusMsg.className = "msg err";
             statusMsg.textContent = "Sonuç bulunamadı.";
@@ -345,96 +257,79 @@
       }
     }
 
+    function pickStream(streams, quality) {
+      if (!Array.isArray(streams) || !streams.length) return null;
+      const sorted = [...streams].sort((a, b) => (b.height || 0) - (a.height || 0));
+      if (quality === "best") return sorted[0];
+      const target = parseInt(quality, 10);
+      return sorted.find((s) => (s.height || 0) <= target) || sorted[sorted.length - 1];
+    }
+
     async function startDownload(overrideUrl) {
       const val = (overrideUrl || qInput.value).trim();
       if (!val) return;
-      if (!val.startsWith("http://") && !val.startsWith("https://")) {
+      if (!VideoIndiriciUI.isHttpUrl(val)) {
         runSearchOrInfo();
         return;
       }
-      if (pollTimer) clearInterval(pollTimer);
+
       progWrap.style.display = "flex";
       saveFileBtn.style.display = "none";
-      progStatus.textContent = "İndirme başlatılıyor...";
-      progPct.textContent = "0%";
-      progFill.style.width = "0%";
+      progStatus.textContent = "Akış hazırlanıyor...";
+      progPct.textContent = "40%";
+      progFill.style.width = "40%";
       statusMsg.className = "msg";
       statusMsg.textContent = "";
       dlBtn.disabled = true;
 
       try {
-        const res = await apiFetch("/api/download", {
-          method: "POST",
-          body: JSON.stringify({ url: val, quality: qualitySelect.value })
-        });
-        const jobId = res.job_id;
-        pollTimer = setInterval(async () => {
-          try {
-            const st = await apiFetch(`/api/status/${encodeURIComponent(jobId)}`);
-            const pct = Math.round(st.percent || 0);
-            progFill.style.width = `${pct}%`;
-            progPct.textContent = `${pct}%`;
+        const vidId = extractYoutubeId(val);
+        let targetUrl = val;
+        let title = "Video";
 
-            if (st.status === "downloading") {
-              const extra = [st.speed, st.eta].filter(Boolean).join(" • ");
-              progStatus.textContent = extra ? `İndiriliyor (${extra})` : "İndiriliyor...";
-            } else if (st.status === "processing") {
-              progStatus.textContent = "Video ve ses birleştiriliyor...";
-            } else if (st.status === "completed") {
-              clearInterval(pollTimer);
-              pollTimer = null;
-              dlBtn.disabled = false;
-              progStatus.textContent = "Hazır!";
-              progFill.style.width = "100%";
-              progPct.textContent = "100%";
-
-              const cfg = getServerConfig();
-              const fileUrl = `${cfg.url}/api/file/${encodeURIComponent(st.filename)}?download=1&token=${encodeURIComponent(cfg.key)}`;
-              saveFileBtn.href = fileUrl;
-              saveFileBtn.style.display = "block";
-              statusMsg.className = "msg ok";
-              statusMsg.textContent = `Tamamlandı: ${st.title || st.filename}. İndirme başlamazsa aşağıdaki butona dokunun.`;
-
-              const a = document.createElement("a");
-              a.href = fileUrl;
-              a.download = st.filename || "video.mp4";
-              document.body.appendChild(a);
-              a.click();
-              a.remove();
-            } else if (st.status === "error") {
-              clearInterval(pollTimer);
-              pollTimer = null;
-              dlBtn.disabled = false;
-              progStatus.textContent = "Hata";
-              statusMsg.className = "msg err";
-              statusMsg.textContent = st.error || "İndirme başarısız.";
-            }
-          } catch (pollErr) {
-            clearInterval(pollTimer);
-            pollTimer = null;
-            dlBtn.disabled = false;
-            progStatus.textContent = "Hata";
-            statusMsg.className = "msg err";
-            statusMsg.textContent = pollErr.message || "Durum alınamadı.";
+        if (vidId) {
+          const data = await fetchFromNodes(`/streams/${encodeURIComponent(vidId)}`);
+          title = data.title || "Video";
+          const q = qualitySelect.value;
+          if (q === "audio") {
+            const audio = (data.audioStreams || []).sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+            if (!audio || !audio.url) throw new Error("Ses akışı bulunamadı.");
+            targetUrl = audio.url;
+          } else {
+            const muxed = (data.videoStreams || []).filter((s) => !s.videoOnly);
+            const chosen = pickStream(muxed, q) || pickStream(data.videoStreams || [], q);
+            if (!chosen || !chosen.url) throw new Error("Video akışı bulunamadı.");
+            targetUrl = chosen.url;
           }
-        }, 900);
+        }
+
+        progFill.style.width = "100%";
+        progPct.textContent = "100%";
+        progStatus.textContent = "Hazır!";
+        saveFileBtn.href = targetUrl;
+        saveFileBtn.style.display = "block";
+        statusMsg.className = "msg ok";
+        statusMsg.textContent = `Hazır: ${title}. Kaydetmek için aşağıdaki butona dokunun.`;
+
+        const a = document.createElement("a");
+        a.href = targetUrl;
+        a.target = "_blank";
+        a.rel = "noopener";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
       } catch (err) {
-        dlBtn.disabled = false;
         progStatus.textContent = "Hata";
+        progFill.style.width = "0%";
         statusMsg.className = "msg err";
-        statusMsg.textContent = err.message || "İndirme başlatılamadı.";
+        statusMsg.textContent = err.message || "İndirme hazırlanamadı.";
+      } finally {
+        dlBtn.disabled = false;
       }
     }
 
     searchBtn.addEventListener("click", runSearchOrInfo);
     dlBtn.addEventListener("click", () => startDownload());
-
-    const initCfg = getServerConfig();
-    refreshConnUi(false);
-    if (initCfg.url && initCfg.key) {
-      setupCard.style.display = "none";
-      apiFetch("/api/ping").then(() => refreshConnUi(true)).catch(() => {});
-    }
   </script>
 </body>
 </html>
