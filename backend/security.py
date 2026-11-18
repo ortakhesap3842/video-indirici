@@ -9,6 +9,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from backend.config import PHONE_TOKEN
+from backend import storage
 
 FAILED_TOKEN_ATTEMPTS: Dict[str, list] = {}
 FAILED_LOCK = threading.Lock()
@@ -53,11 +54,14 @@ def _mask_ip(ip: str) -> str:
 def _record_waf_event(ip: str, reason: str, path: str, strike: bool = True) -> None:
     global WAF_BLOCKED_TOTAL
     now = time.time()
+    ts_str = time.strftime("%H:%M:%S")
+    masked = _mask_ip(ip)
+    ban_until = 0.0
     with WAF_LOCK:
         WAF_BLOCKED_TOTAL += 1
         WAF_EVENTS.append({
-            "time": time.strftime("%H:%M:%S"),
-            "ip": _mask_ip(ip),
+            "time": ts_str,
+            "ip": masked,
             "reason": reason,
             "path": path[:80],
         })
@@ -68,7 +72,11 @@ def _record_waf_event(ip: str, reason: str, path: str, strike: bool = True) -> N
             strikes.append(now)
             WAF_STRIKES[ip] = strikes
             if len(strikes) >= 5:
-                WAF_BANS[ip] = now + WAF_BAN_SECONDS
+                ban_until = now + WAF_BAN_SECONDS
+                WAF_BANS[ip] = ban_until
+    storage.record_waf_event(ts_str, masked, reason, path)
+    if ban_until > 0.0:
+        storage.save_ban(ip, ban_until)
 
 
 def _waf_check_text(text: str) -> Optional[str]:
@@ -104,6 +112,10 @@ async def waf_security_middleware(request: Request, call_next: Any) -> Any:
 
     with WAF_LOCK:
         ban_until = WAF_BANS.get(client_ip, 0.0)
+        if ban_until == 0.0:
+            ban_until = storage.get_ban_until(client_ip)
+            if ban_until > now:
+                WAF_BANS[client_ip] = ban_until
         if ban_until > now:
             return JSONResponse(
                 {"detail": "IP adresiniz güvenlik duvarı tarafından geçici olarak engellendi."},
@@ -170,16 +182,13 @@ async def waf_security_middleware(request: Request, call_next: Any) -> Any:
 
 
 def get_waf_status() -> Dict[str, Any]:
-    now = time.time()
-    with WAF_LOCK:
-        active_bans = sum(1 for until in WAF_BANS.values() if until > now)
-        recent = list(WAF_EVENTS[-15:])
-        blocked_total = WAF_BLOCKED_TOTAL
+    summary = storage.get_waf_summary(15)
     return {
         "firewall": "active",
-        "blocked_total": blocked_total,
-        "active_bans": active_bans,
-        "recent_events": recent,
+        "persistent_storage": "sqlite",
+        "blocked_total": summary["total"],
+        "active_bans": storage.count_active_bans(),
+        "recent_events": summary["events"],
     }
 
 

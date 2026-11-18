@@ -61,6 +61,20 @@ class CoreTests(unittest.TestCase):
     def test_version_parsing(self):
         self.assertGreater(parse_version("1.4.3"), parse_version("1.4.2"))
 
+    def test_sqlite_persistence(self):
+        import time
+        from backend import storage
+
+        storage.save_job("job_test_1", {"job_id": "job_test_1", "status": "completed", "percent": 100.0})
+        loaded = storage.load_job("job_test_1")
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded["status"], "completed")
+
+        storage.save_ban("198.51.100.99", time.time() + 120)
+        self.assertGreater(storage.get_ban_until("198.51.100.99"), time.time())
+        storage.save_ban("198.51.100.99", time.time() - 5)
+        self.assertEqual(storage.get_ban_until("198.51.100.99"), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

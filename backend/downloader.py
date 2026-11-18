@@ -14,6 +14,7 @@ import yt_dlp
 from backend.config import DEFAULT_DOWNLOAD_DIR
 from backend.dubbing import NEURAL_VOICES, apply_ai_dubbing
 from backend.security import detect_platform
+from backend import storage
 from backend.universal import discover_embedded_media_url
 
 jobs: Dict[str, Dict[str, Any]] = {}
@@ -98,9 +99,13 @@ def run_download_job(
     job_id: str, url: str, quality: str, subtitle_lang: str = "", dub_lang: str = "", gemini_api_key: str = ""
 ) -> None:
     def update_job(**kwargs: Any) -> None:
+        snapshot: Optional[Dict[str, Any]] = None
         with jobs_lock:
             if job_id in jobs:
                 jobs[job_id].update(kwargs)
+                snapshot = dict(jobs[job_id])
+        if snapshot is not None and kwargs.get("status") in ("completed", "error", "dubbing", "processing"):
+            storage.save_job(job_id, snapshot)
 
     def progress_hook(d: Dict[str, Any]) -> None:
         status = d.get("status")
@@ -342,6 +347,7 @@ def create_download_job(
             "error": "",
         }
 
+    storage.save_job(job_id, dict(jobs[job_id]))
     thread = threading.Thread(
         target=run_download_job,
         args=(job_id, url, clean_quality, clean_sub, clean_dub, (gemini_api_key or "").strip()),
@@ -354,6 +360,9 @@ def create_download_job(
 def get_job_status(job_id: str) -> Dict[str, Any]:
     with jobs_lock:
         job = jobs.get(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="İndirme görevi bulunamadı.")
-        return dict(job)
+        if job:
+            return dict(job)
+    persisted = storage.load_job(job_id)
+    if persisted:
+        return persisted
+    raise HTTPException(status_code=404, detail="İndirme görevi bulunamadı.")
