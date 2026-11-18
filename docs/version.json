@@ -1,5 +1,5 @@
 {
-  "version": "1.4.6",
+  "version": "1.4.7",
   "download_url": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
   "downloads": {
     "windows": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.exe",
@@ -7,5 +7,5 @@
     "android": "https://github.com/ortakhesap3842/video-indirici/releases/latest/download/VideoIndirici.apk",
     "ios": "./app.html"
   },
-  "notes": "v1.4.6: Android 1080p/4K MediaMuxer birleştirme, kalıcı SQLite state, YouTube cookies/multi-client desteği ve macOS CI hızlandırma."
+  "notes": "v1.4.7: İndirilen MP4 videoların içine kalıcı altyazı gömme (Android OpenGL SubtitleBurner + Masaüstü FFmpeg)."
 }

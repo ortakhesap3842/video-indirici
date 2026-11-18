@@ -438,6 +438,21 @@ public class MainActivity extends Activity {
                                 obj.put("dub_note", "Dublaj uygulanamadı: " + dubEx.getMessage());
                             }
                         }
+                        org.json.JSONArray subCues = obj.optJSONArray("sub_cues");
+                        if (subtitleLang != null && !subtitleLang.trim().isEmpty() && subCues != null && subCues.length() > 0 && !fileName.toLowerCase().endsWith(".m4a")) {
+                            evalJs("window.onDownloadProgress(100, 'Altyazılar videoya gömülüyor...')");
+                            try {
+                                File burnedOut = new File(tempDir, "sub_" + System.currentTimeMillis() + ".mp4");
+                                File resBurn = SubtitleBurner.burnSubtitles(new File(srcPath), subCues, burnedOut);
+                                if (resBurn != null && resBurn.exists()) {
+                                    new File(srcPath).delete();
+                                    srcPath = resBurn.getAbsolutePath();
+                                    int dot = fileName.lastIndexOf('.');
+                                    String tag = " [CC-" + subtitleLang.trim().toUpperCase() + "]";
+                                    fileName = dot > 0 ? fileName.substring(0, dot) + tag + ".mp4" : fileName + tag + ".mp4";
+                                }
+                            } catch (Exception ignored) {}
+                        }
                         String subPath = obj.optString("subtitle_path", "");
                         if (!subPath.isEmpty()) {
                             File subFile = new File(subPath);

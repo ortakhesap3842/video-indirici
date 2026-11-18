@@ -224,14 +224,26 @@ def run_download_job(
             if sub_candidate is not None and ffmpeg_loc:
                 if sub_langs and Path(filepath).suffix.lower() == ".mp4":
                     tmp_sub_mp4 = Path(filepath).with_name(f"{Path(filepath).stem}.subtmp.mp4")
-                    emb_res = subprocess.run(
+                    safe_sub_name = sub_candidate.name.replace("'", "\\'")
+                    burn_res = subprocess.run(
                         [
-                            ffmpeg_loc, "-y", "-i", str(filepath), "-i", str(sub_candidate),
-                            "-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text", str(tmp_sub_mp4),
+                            ffmpeg_loc, "-y", "-i", str(filepath),
+                            "-vf", f"subtitles='{safe_sub_name}'",
+                            "-c:a", "copy", str(tmp_sub_mp4),
                         ],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180,
+                        cwd=str(sub_candidate.parent),
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300,
                     )
-                    if emb_res.returncode == 0 and tmp_sub_mp4.exists() and tmp_sub_mp4.stat().st_size > 0:
+                    if burn_res.returncode != 0 or not tmp_sub_mp4.exists() or tmp_sub_mp4.stat().st_size == 0:
+                        tmp_sub_mp4.unlink(missing_ok=True)
+                        burn_res = subprocess.run(
+                            [
+                                ffmpeg_loc, "-y", "-i", str(filepath), "-i", str(sub_candidate),
+                                "-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text", str(tmp_sub_mp4),
+                            ],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180,
+                        )
+                    if burn_res.returncode == 0 and tmp_sub_mp4.exists() and tmp_sub_mp4.stat().st_size > 0:
                         os.replace(tmp_sub_mp4, filepath)
                     else:
                         tmp_sub_mp4.unlink(missing_ok=True)

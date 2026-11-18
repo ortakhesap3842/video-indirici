@@ -287,7 +287,7 @@ def _translate_srt_cues(src_path, target_lang, gemini_api_key=""):
                 except Exception:
                     tr = body
             out_blocks.append(f"{idx}\n{st} --> {en}\n{tr}")
-            dub_cues.append({"start_ms": _ts_to_ms(st), "text": tr})
+            dub_cues.append({"start_ms": _ts_to_ms(st), "end_ms": _ts_to_ms(en), "text": tr})
         if not out_blocks:
             return None, []
         dub_path = os.path.splitext(src_path)[0] + f".dub-{target_lang}.srt"
@@ -391,6 +391,7 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
         subtitle_path = ""
         subtitle_name = ""
         vtt_text = ""
+        sub_cues = []
         dub_cues = []
         sub_note = ""
         if (sub_langs or dub_langs) and quality != "audio" and filepath:
@@ -434,10 +435,25 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
                 sub_note = " (Altyazı hız sınırına takıldı)"
 
             stem = os.path.splitext(filepath)[0]
+            sub_cues = []
             for fn in os.listdir(output_dir):
                 full = os.path.join(output_dir, fn)
                 if full.startswith(stem) and os.path.splitext(fn)[1].lower() in (".srt", ".vtt"):
                     vtt_text = _srt_to_vtt_text(full)
+                    if sub_langs:
+                        try:
+                            raw_sub = open(full, "r", encoding="utf-8", errors="ignore").read()
+                            for blk in re.split(r"\r?\n\r?\n+", raw_sub):
+                                lns = [ln.strip() for ln in blk.splitlines() if ln.strip()]
+                                ti = next((i for i, ln in enumerate(lns) if "-->" in ln), -1)
+                                if ti == -1: continue
+                                mm = re.search(r"([\d:.,]+)\s*-->\s*([\d:.,]+)", lns[ti])
+                                if not mm: continue
+                                txt = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", " ".join(lns[ti + 1 :]))).strip()
+                                if txt:
+                                    sub_cues.append({"start_ms": _ts_to_ms(mm.group(1)), "end_ms": _ts_to_ms(mm.group(2)), "text": txt})
+                        except Exception:
+                            pass
                     if dub_langs:
                         translated, dub_cues = _translate_srt_cues(full, dub_langs[0], gemini_api_key=gemini_api_key)
                         if translated:
@@ -458,6 +474,7 @@ def download_video(url, quality, output_dir, progress_cb=None, subtitle_lang="",
             "subtitle_path": subtitle_path,
             "subtitle_name": subtitle_name,
             "vtt_text": vtt_text,
+            "sub_cues": sub_cues,
             "dub_cues": dub_cues,
             "title": (info.get("title") or "Video") + sub_note,
         }, ensure_ascii=False)
